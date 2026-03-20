@@ -27,12 +27,9 @@ It is intended for cleaning local development machines where projects accumulate
 
 Tkinter is usually bundled with the standard Python installer from python.org.
 
-Run with either:
+Run with:
 
 ```powershell
-python devbroom.py
-
-# or
 python main.py
 ```
 
@@ -50,12 +47,9 @@ sudo apt install python3-tk
 sudo dnf install python3-tkinter
 ```
 
-Run with either:
+Run with:
 
 ```bash
-python3 devbroom.py
-
-# or
 python3 main.py
 ```
 
@@ -103,12 +97,19 @@ This reduces false positives inside package contents and nested dependency trees
 - Read-only files are handled during deletion where possible.
 - Permission errors and locked files are reported but do not stop the entire operation.
 
+## Interface
+
+- Minimal desktop UI with both light mode and dark mode
+- Theme toggle built into the header
+- Filter controls for `node_modules` and Python virtual environments
+- Selective deletion with a summary of reclaimable space
+
 ## Known Limitations
 
 - Scans can be slow on very large home directories because folder sizes are calculated recursively.
 - Locked files on Windows may still prevent complete deletion.
 - Tkinter look-and-feel depends on the local platform and installed themes.
-- The app is still intentionally small and does not yet include tests or packaging metadata.
+- The app is intentionally small and still does not include packaging metadata.
 
 ## Edge Cases Covered
 
@@ -137,13 +138,26 @@ The code is split into a few small modules to keep maintenance simple:
 - `devbroom/cleanup.py`: safe deletion helpers
 - `devbroom/models.py`: shared constants and `ScanTarget`
 - `main.py`: thin launcher
-- `devbroom.py`: compatibility launcher
+
+## Tests
+
+The project includes a small unit test suite for non-UI logic:
+
+```bash
+python -m unittest discover -s tests
+```
+
+Covered areas:
+
+- target detection
+- virtualenv validation
+- nested-folder skip behavior
+- safe delete behavior
 
 ## Suggested Next Steps
 
 If this tool grows beyond a single script, the next practical production steps would be:
 
-- split scanner and deletion logic into separate modules
-- add unit tests for target detection and delete safeguards
+- expand unit tests around scanner and delete safeguards
 - add a CLI mode for headless cleanup
 - package it with a proper project layout and dependency metadata
