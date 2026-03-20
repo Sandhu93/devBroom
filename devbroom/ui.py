@@ -18,8 +18,8 @@ APP_TITLE = "DevBroom"
 APP_SUBTITLE = "Clean dependency folders without touching project code."
 WINDOW_SIZE = "1160x760"
 WINDOW_MIN_SIZE = (900, 620)
-CHECKED_MARK = "Select"
-UNCHECKED_MARK = ""
+CHECKED_MARK = "☑"
+UNCHECKED_MARK = "☐"
 
 
 @dataclass(frozen=True)
