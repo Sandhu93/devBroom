@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 import re
 
 from devbroom import __version__
-from devbroom.app import build_parser, run_cli
+from devbroom.app import build_parser, main, run_cli
 from devbroom.cli import format_targets_table, write_json_report, write_text_report
 from devbroom.models import NODE_MODULES_NAME, ScanTarget, VENV_KIND
 from devbroom.settings import AppSettings
@@ -210,6 +210,72 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["deleted_count"], 1)
         self.assertEqual(payload["failed_count"], 0)
         self.assertEqual(len(payload["deleted"]), 1)
+
+    # --- main() entry point ---
+
+    def test_main_routes_to_cli(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = main(["--cli", "--path", str(self.workdir)])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("node_modules", buffer.getvalue())
+
+    def test_main_routes_to_gui(self) -> None:
+        with patch("devbroom.app.run_gui") as mock_gui:
+            exit_code = main([])
+
+        mock_gui.assert_called_once()
+        self.assertEqual(exit_code, 0)
+
+    def test_main_no_settings_ignores_inverts_to_false(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        ignored_root = self.workdir / "ignored"
+        ignored_target = ignored_root / NODE_MODULES_NAME
+        ignored_target.mkdir(parents=True)
+        (ignored_target / "package.json").write_text("{}", encoding="ascii")
+
+        settings = AppSettings(last_path=str(self.workdir), theme="dark", ignored_paths=(str(ignored_root),))
+        buffer = io.StringIO()
+        with patch("devbroom.app.load_settings", return_value=settings):
+            with redirect_stdout(buffer):
+                exit_code = main(["--cli", "--path", str(self.workdir), "--no-settings-ignores"])
+
+        # ignored_target should appear because --no-settings-ignores disables saved ignores
+        self.assertEqual(exit_code, 0)
+        self.assertIn(str(ignored_target), buffer.getvalue())
+
+    # --- run_cli() untested branches ---
+
+    def test_run_cli_writes_json_report_in_scan_only_mode(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+        report_path = self.workdir / "scan.json"
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = run_cli(self.workdir, report_path, use_settings_ignores=False)
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(report_path.exists())
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["count"], 1)
+        self.assertIn("JSON report written to", buffer.getvalue())
+
+    def test_run_cli_delete_with_no_targets_is_noop(self) -> None:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = run_cli(self.workdir, None, use_settings_ignores=False, delete=True, yes=True)
+
+        self.assertEqual(exit_code, 0)
 
     def test_delete_aborts_on_no_confirmation(self) -> None:
         node_modules = self.workdir / "app" / "node_modules"
