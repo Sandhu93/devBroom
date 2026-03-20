@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from .cli import format_targets_table, write_json_report, write_text_report
 from .cleanup import delete_tree
 from .models import NODE_MODULES_NAME, VENV_KIND, ScanTarget
 from .scanner import human_size, iter_scan_targets
@@ -332,6 +333,12 @@ class DevBroomApp(tk.Tk):
         self._del_btn.pack(side="left")
         self._del_btn.config(state="disabled")
 
+        self._preview_btn = self._make_button(self._actions_wrap, "Preview", self._preview_results)
+        self._preview_btn.pack(side="left", padx=(8, 0))
+
+        self._export_btn = self._make_button(self._actions_wrap, "Export", self._export_results)
+        self._export_btn.pack(side="left", padx=(8, 0))
+
         self._table_frame = tk.Frame(self._results_card, padx=18, pady=0)
         self._table_frame.pack(fill="both", expand=True, pady=(0, 18))
 
@@ -472,6 +479,8 @@ class DevBroomApp(tk.Tk):
             self._sel_all_btn,
             self._desel_btn,
             self._del_btn,
+            self._preview_btn,
+            self._export_btn,
         ):
             self._refresh_button(button, hovered=False)
 
@@ -817,6 +826,72 @@ class DevBroomApp(tk.Tk):
         visible_ids = self._tree.get_children()
         visible_total = sum(self._items[iid].size for iid in visible_ids if iid in self._items)
         self._visible_total_var.set(f"{human_size(visible_total)} visible")
+
+    def _visible_targets(self) -> list[ScanTarget]:
+        return [self._items[iid] for iid in self._tree.get_children() if iid in self._items]
+
+    def _preview_results(self) -> None:
+        targets = self._visible_targets()
+        preview_text = format_targets_table(targets)
+
+        preview = tk.Toplevel(self)
+        preview.title("Scan Preview")
+        preview.geometry("900x520")
+        preview.configure(bg=self._theme.surface)
+
+        frame = tk.Frame(preview, bg=self._theme.surface, padx=16, pady=16)
+        frame.pack(fill="both", expand=True)
+
+        text = tk.Text(
+            frame,
+            wrap="none",
+            relief="flat",
+            bg=self._theme.field_bg,
+            fg=self._theme.text,
+            insertbackground=self._theme.text,
+            font=(self._mono_font, 10),
+        )
+        text.insert("1.0", preview_text)
+        text.config(state="disabled")
+
+        yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        xscroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
+        text.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+
+        text.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+
+    def _export_results(self) -> None:
+        targets = self._visible_targets()
+        if not targets:
+            messagebox.showinfo("Nothing to export", "There are no visible scan results to export.")
+            return
+
+        output = filedialog.asksaveasfilename(
+            title="Export scan results",
+            defaultextension=".json",
+            filetypes=[
+                ("JSON files", "*.json"),
+                ("Text files", "*.txt"),
+            ],
+        )
+        if not output:
+            return
+
+        output_path = Path(output)
+        try:
+            if output_path.suffix.lower() == ".txt":
+                write_text_report(targets, output_path)
+            else:
+                write_json_report(targets, output_path)
+        except OSError as exc:
+            messagebox.showerror("Export failed", f"Could not export results:\n{exc}")
+            return
+
+        self._status_var.set(f"Exported {len(targets)} result(s) to {output_path}")
 
     def _ignored_summary_text(self) -> str:
         count = len(self._ignored_paths)

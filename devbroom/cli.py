@@ -49,6 +49,11 @@ def format_targets_table(targets: list[ScanTarget]) -> str:
     return "\n".join(lines)
 
 
+def write_text_report(targets: list[ScanTarget], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(format_targets_table(targets) + "\n", encoding="utf-8")
+
+
 def write_json_report(targets: list[ScanTarget], output_path: Path) -> None:
     payload = {
         "count": len(targets),

@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from devbroom.app import run_cli
-from devbroom.cli import format_targets_table, write_json_report
+from devbroom.cli import format_targets_table, write_json_report, write_text_report
 from devbroom.models import NODE_MODULES_NAME, ScanTarget, VENV_KIND
 
 
@@ -46,6 +46,17 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["count"], 2)
         self.assertEqual(payload["total_size_bytes"], 3072)
         self.assertEqual(len(payload["targets"]), 2)
+
+    def test_write_text_report_writes_table_output(self) -> None:
+        targets = [ScanTarget(path=Path("/tmp/project/node_modules"), kind=NODE_MODULES_NAME, size=1024)]
+        output = self.workdir / "report.txt"
+
+        write_text_report(targets, output)
+
+        text = output.read_text(encoding="utf-8")
+        self.assertIn("TYPE", text)
+        self.assertIn("node_modules", text)
+        self.assertIn("Found 1 folders totaling 1.0 KB.", text)
 
     def test_run_cli_scans_and_prints_results(self) -> None:
         node_modules = self.workdir / "app" / "node_modules"

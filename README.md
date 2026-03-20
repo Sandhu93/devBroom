@@ -11,6 +11,8 @@ It scans a directory, finds removable dependency folders such as `node_modules` 
 - Detect Python virtual environments such as `venv`, `.venv`, `env`, `.env`, and `virtualenv`
 - Show estimated folder sizes before deletion
 - Selectively delete only the folders you choose
+- Preview current scan results before export
+- Export scan results to JSON or text
 - Light mode and dark mode UI
 - Works on Windows and Linux
 
@@ -91,7 +93,7 @@ That reduces false positives inside installed dependencies.
 - Light and dark theme toggle in the header
 - Folder-type filters for `node_modules` and Python virtual environments
 - Scan progress and result summary
-- Select-all, clear, and selective delete actions
+- Select-all, clear, preview, export, and selective delete actions
 
 ## Running The App
 
@@ -129,6 +131,19 @@ CLI output includes:
 - estimated sizes
 - total reclaimable size
 - optional JSON export
+- shared text/preview formatting with the GUI
+
+## Preview And Export
+
+From the GUI:
+
+- `Preview` opens a read-only view of the current visible scan results
+- `Export` saves the current visible scan results as `.json` or `.txt`
+
+From the CLI:
+
+- `--json-out scan-report.json` exports JSON
+- the console output itself serves as a plain-text preview/report
 
 ## Tests
 
@@ -155,6 +170,7 @@ Covered areas:
 - safe delete behavior
 - settings persistence
 - CLI scan and JSON export behavior
+- text report export behavior
 
 ## Project Layout
 
@@ -177,6 +193,7 @@ Covered areas:
 - Locked files on Windows may still prevent complete deletion.
 - Tkinter styling can vary across platforms and desktop environments.
 - CLI mode currently scans and reports only; it does not delete folders yet.
+- GUI export currently exports visible rows only, which is usually the right behavior after filtering.
 
 ## Good Next Modifications
 
@@ -184,9 +201,9 @@ If you want to improve this app without overengineering it, these are the best n
 
 - Add an option to sort by largest folders first immediately after scan completion.
 - Add a confirmation detail panel that lists exactly what will be deleted before removal.
-- Add a non-destructive preview mode that exports results to text or JSON.
 - Add a few more tests around Windows read-only files and scan interruption behavior.
 - Add delete support to CLI mode with an explicit `--delete` confirmation flag.
+- Add CSV export if you want results to be easier to open in spreadsheets.
 
 ## What I Would Not Add Yet
 
