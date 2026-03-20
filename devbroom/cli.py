@@ -9,9 +9,9 @@ from .models import ScanTarget
 from .scanner import human_size, iter_scan_targets
 
 
-def scan_targets(root: Path, ignored_paths: tuple[str, ...] = ()) -> list[ScanTarget]:
+def scan_targets(root: Path, ignored_paths: tuple[str, ...] = (), require_git_repo: bool = True) -> list[ScanTarget]:
     stop_event = threading.Event()
-    return list(iter_scan_targets(root, stop_event, ignored_paths=ignored_paths))
+    return list(iter_scan_targets(root, stop_event, ignored_paths=ignored_paths, require_git_repo=require_git_repo))
 
 
 def serialize_targets(targets: list[ScanTarget]) -> list[dict[str, str | int]]:

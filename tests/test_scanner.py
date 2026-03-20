@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+import tempfile
 import threading
 import unittest
 import uuid
@@ -13,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from devbroom.models import NODE_MODULES_NAME, VENV_KIND
-from devbroom.scanner import human_size, is_virtualenv, iter_scan_targets, safe_folder_size
+from devbroom.scanner import human_size, is_inside_git_repo, is_virtualenv, iter_scan_targets, safe_folder_size
 
 
 TEST_ROOT = Path(__file__).resolve().parent / ".tmp"
@@ -131,6 +132,37 @@ class ScannerTests(RepoTempDirTestCase):
         self.assertEqual(len(targets), 1)
         self.assertIn(targets[0].path, {first_target, second_target})
         self.assertTrue(stop_event.is_set())
+
+    def test_iter_scan_targets_skips_target_outside_git_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            node_modules = tmp_path / "app" / "node_modules"
+            node_modules.mkdir(parents=True)
+            (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+            targets = list(iter_scan_targets(tmp_path, threading.Event()))
+
+            self.assertEqual(targets, [], "node_modules outside a git repo should be skipped by default")
+
+    def test_iter_scan_targets_include_non_project_finds_target_outside_git_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            node_modules = tmp_path / "app" / "node_modules"
+            node_modules.mkdir(parents=True)
+            (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+            targets = list(iter_scan_targets(tmp_path, threading.Event(), require_git_repo=False))
+
+            self.assertEqual(len(targets), 1)
+            self.assertEqual(targets[0].path, node_modules)
+
+    def test_is_inside_git_repo_returns_true_for_project_subpath(self) -> None:
+        # self.workdir lives under the project repo, so this must be True
+        self.assertTrue(is_inside_git_repo(self.workdir))
+
+    def test_is_inside_git_repo_returns_false_outside_any_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.assertFalse(is_inside_git_repo(Path(tmpdir)))
 
     def test_safe_folder_size_honors_stop_event(self) -> None:
         target = self.workdir / "project" / NODE_MODULES_NAME
