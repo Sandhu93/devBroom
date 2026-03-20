@@ -1,22 +1,18 @@
 # DevBroom
 
-DevBroom is a small Tkinter desktop utility for finding and deleting dependency folders that commonly consume large amounts of disk space in development environments.
+DevBroom is a small cross-platform desktop utility for reclaiming disk space from development dependencies.
 
-It currently scans for:
+It scans a directory, finds removable dependency folders such as `node_modules` and Python virtual environments, shows their estimated size, and lets you delete selected entries from a Tkinter GUI.
 
-- `node_modules`
-- Python virtual environments named `venv`, `.venv`, `env`, `.env`, or `virtualenv`
+## Features
 
-The tool is designed to run on both Windows and Linux.
-
-## What It Does
-
-DevBroom recursively scans a chosen directory, estimates the size of removable dependency folders, and lets you selectively delete them from a GUI.
-
-It is intended for cleaning local development machines where projects accumulate:
-
-- JavaScript package installs
-- Python virtual environments
+- Scan a chosen directory recursively
+- Detect `node_modules`
+- Detect Python virtual environments such as `venv`, `.venv`, `env`, `.env`, and `virtualenv`
+- Show estimated folder sizes before deletion
+- Selectively delete only the folders you choose
+- Light mode and dark mode UI
+- Works on Windows and Linux
 
 ## Requirements
 
@@ -25,9 +21,9 @@ It is intended for cleaning local development machines where projects accumulate
 
 ### Windows
 
-Tkinter is usually bundled with the standard Python installer from python.org.
+Tkinter is usually included with the standard Python installer from python.org.
 
-Run with:
+Run:
 
 ```powershell
 python main.py
@@ -35,116 +31,91 @@ python main.py
 
 ### Linux
 
-Many Linux distributions do not install Tkinter by default.
+Some Linux distributions do not include Tkinter by default.
 
 Examples:
 
 ```bash
-# Debian/Ubuntu
+# Debian / Ubuntu
 sudo apt install python3-tk
 
 # Fedora
 sudo dnf install python3-tkinter
 ```
 
-Run with:
+Run:
 
 ```bash
 python3 main.py
 ```
 
-## Detection Rules
+## How It Works
 
-### `node_modules`
+DevBroom scans for these targets:
 
-- Any directory named exactly `node_modules` is treated as removable.
-- The scanner does not descend into a matched `node_modules` directory.
-
-### Python virtual environments
-
-Candidate directory names:
-
+- `node_modules`
 - `venv`
 - `.venv`
 - `env`
 - `.env`
 - `virtualenv`
 
-A candidate is only treated as a real virtual environment if it contains one of:
+Virtual environment candidates are only treated as real Python environments if they contain one of:
 
 - `pyvenv.cfg`
 - `Scripts/activate`
 - `bin/activate`
 
-This avoids deleting unrelated folders that merely happen to use a common venv-like name.
+This prevents deleting unrelated folders that only happen to use a common virtualenv-like name.
 
-### Skipped parents
-
-The scanner intentionally skips candidates found inside these parent directories:
+The scanner also skips likely nested package locations such as:
 
 - `site-packages`
 - `Lib`
 - `lib`
 - `node_modules`
 
-This reduces false positives inside package contents and nested dependency trees.
+That reduces false positives inside installed dependencies.
 
 ## Safety Notes
 
-- Deletion is permanent. Files are not moved to Trash or Recycle Bin.
-- Symlinked directories are ignored during scanning.
+- Deletion is permanent. Items are not moved to Trash or Recycle Bin.
+- Symlinked directories are skipped during scanning.
 - Symlink targets are not deleted.
 - Read-only files are handled during deletion where possible.
-- Permission errors and locked files are reported but do not stop the entire operation.
+- Permission errors and locked files are reported without aborting the entire operation.
 
 ## Interface
 
-- Minimal desktop UI with both light mode and dark mode
-- Theme toggle built into the header
-- Filter controls for `node_modules` and Python virtual environments
-- Selective deletion with a summary of reclaimable space
-
-## Known Limitations
-
-- Scans can be slow on very large home directories because folder sizes are calculated recursively.
-- Locked files on Windows may still prevent complete deletion.
-- Tkinter look-and-feel depends on the local platform and installed themes.
-- The app is intentionally small and still does not include packaging metadata.
-
-## Edge Cases Covered
-
-- Permission-denied files during scan
-- Read-only files during delete
-- Symlinked directories and junction-like targets
-- Folders removed externally while scan/delete is running
-- Window close during an active scan
-- Partial delete failures with accurate reclaimed-space reporting
+- Minimal card-based desktop UI
+- Light and dark theme toggle in the header
+- Folder-type filters for `node_modules` and Python virtual environments
+- Scan progress and result summary
+- Select-all, clear, and selective delete actions
 
 ## Running The App
 
-1. Launch the script.
-2. Choose a directory to scan.
-3. Wait for results to populate.
+1. Start the application with `python main.py` or `python3 main.py`.
+2. Choose the root directory you want to scan.
+3. Wait for the scan to populate results.
 4. Select the folders you want to remove.
 5. Click `Delete Selected`.
 
-## Project Layout
-
-The code is split into a few small modules to keep maintenance simple:
-
-- `devbroom/app.py`: app startup
-- `devbroom/ui.py`: Tkinter UI and interaction flow
-- `devbroom/scanner.py`: target discovery and size calculation
-- `devbroom/cleanup.py`: safe deletion helpers
-- `devbroom/models.py`: shared constants and `ScanTarget`
-- `main.py`: thin launcher
-
 ## Tests
 
-The project includes a small unit test suite for non-UI logic:
+The project includes lightweight unit tests for the non-UI logic.
+
+Run the full suite:
 
 ```bash
 python -m unittest discover -s tests
+```
+
+You can also run each file directly:
+
+```bash
+python tests/test_scanner.py
+python tests/test_cleanup.py
 ```
 
 Covered areas:
@@ -154,10 +125,43 @@ Covered areas:
 - nested-folder skip behavior
 - safe delete behavior
 
-## Suggested Next Steps
+## Project Layout
 
-If this tool grows beyond a single script, the next practical production steps would be:
+- `main.py`: thin application launcher
+- `devbroom/app.py`: app startup
+- `devbroom/ui.py`: Tkinter UI and theme handling
+- `devbroom/scanner.py`: target discovery and size calculation
+- `devbroom/cleanup.py`: delete helpers and filesystem cleanup
+- `devbroom/models.py`: shared constants and `ScanTarget`
+- `tests/test_scanner.py`: scanner tests
+- `tests/test_cleanup.py`: cleanup tests
 
-- expand unit tests around scanner and delete safeguards
-- add a CLI mode for headless cleanup
-- package it with a proper project layout and dependency metadata
+## Known Limitations
+
+- Scans can be slow on very large directories because folder sizes are calculated recursively.
+- Locked files on Windows may still prevent complete deletion.
+- Tkinter styling can vary across platforms and desktop environments.
+- The app currently has GUI-only operation; there is no CLI mode yet.
+
+## Good Next Modifications
+
+If you want to improve this app without overengineering it, these are the best next changes:
+
+- Add a small settings file to remember the last scanned path and preferred theme.
+- Add an option to sort by largest folders first immediately after scan completion.
+- Add a confirmation detail panel that lists exactly what will be deleted before removal.
+- Add a simple ignore list for folders the user never wants scanned.
+- Add a CLI mode for headless cleanup on remote Linux machines.
+- Add a non-destructive preview mode that exports results to text or JSON.
+- Add a small status counter for total reclaimable size across all visible results, not just selected ones.
+- Add a few more tests around Windows read-only files and scan interruption behavior.
+
+## What I Would Not Add Yet
+
+These would increase complexity faster than they improve this project:
+
+- a database
+- background worker processes
+- plugin architecture
+- packaging into an installer before the feature set stabilizes
+- UI automation tests for Tkinter unless the UI becomes much more complex
