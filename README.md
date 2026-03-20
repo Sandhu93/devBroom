@@ -128,6 +128,24 @@ Export results to JSON:
 python3 main.py --cli --path /path/to/projects --json-out scan-report.json
 ```
 
+Preview what would be deleted without removing anything:
+
+```bash
+python3 main.py --cli --path /path/to/projects --dry-run
+```
+
+Delete all discovered targets (with confirmation prompt):
+
+```bash
+python3 main.py --cli --path /path/to/projects --delete
+```
+
+Delete all discovered targets without a confirmation prompt:
+
+```bash
+python3 main.py --cli --path /path/to/projects --delete --yes
+```
+
 CLI output includes:
 
 - matching folders
@@ -250,14 +268,12 @@ The suite is intentionally strongest around non-UI logic. Tkinter widget behavio
 - Scans can be slow on very large directories because folder sizes are calculated recursively.
 - Locked files on Windows may still prevent complete deletion.
 - Tkinter styling can vary across platforms and desktop environments.
-- CLI mode currently scans and reports only; it does not delete folders yet.
 - GUI export currently exports visible rows only, which is usually the right behavior after filtering.
 
 ## Good Next Modifications
 
 - Add an option to sort by largest folders first immediately after scan completion.
 - Add a confirmation detail panel that lists exactly what will be deleted before removal.
-- Add delete support to CLI mode with an explicit `--delete` confirmation flag.
 - Add CSV export if you want results to be easier to open in spreadsheets.
 - Add packaging/install steps once the feature set stabilizes.
 
