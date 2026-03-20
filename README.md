@@ -101,6 +101,35 @@ That reduces false positives inside installed dependencies.
 4. Select the folders you want to remove.
 5. Click `Delete Selected`.
 
+## CLI Mode
+
+DevBroom also supports a headless CLI mode for remote sessions and Linux servers.
+
+Basic scan:
+
+```bash
+python3 main.py --cli --path /path/to/projects
+```
+
+Skip saved ignore paths for one run:
+
+```bash
+python3 main.py --cli --path /path/to/projects --no-settings-ignores
+```
+
+Export results to JSON:
+
+```bash
+python3 main.py --cli --path /path/to/projects --json-out scan-report.json
+```
+
+CLI output includes:
+
+- matching folders
+- estimated sizes
+- total reclaimable size
+- optional JSON export
+
 ## Tests
 
 The project includes lightweight unit tests for the non-UI logic.
@@ -124,37 +153,40 @@ Covered areas:
 - virtualenv validation
 - nested-folder skip behavior
 - safe delete behavior
+- settings persistence
+- CLI scan and JSON export behavior
 
 ## Project Layout
 
 - `main.py`: thin application launcher
 - `devbroom/app.py`: app startup
+- `devbroom/cli.py`: headless CLI scan/report mode
 - `devbroom/ui.py`: Tkinter UI and theme handling
 - `devbroom/scanner.py`: target discovery and size calculation
 - `devbroom/cleanup.py`: delete helpers and filesystem cleanup
 - `devbroom/models.py`: shared constants and `ScanTarget`
+- `devbroom/settings.py`: saved preferences and ignored paths
 - `tests/test_scanner.py`: scanner tests
 - `tests/test_cleanup.py`: cleanup tests
+- `tests/test_settings.py`: settings tests
+- `tests/test_cli.py`: CLI tests
 
 ## Known Limitations
 
 - Scans can be slow on very large directories because folder sizes are calculated recursively.
 - Locked files on Windows may still prevent complete deletion.
 - Tkinter styling can vary across platforms and desktop environments.
-- The app currently has GUI-only operation; there is no CLI mode yet.
+- CLI mode currently scans and reports only; it does not delete folders yet.
 
 ## Good Next Modifications
 
 If you want to improve this app without overengineering it, these are the best next changes:
 
-- Add a small settings file to remember the last scanned path and preferred theme.
 - Add an option to sort by largest folders first immediately after scan completion.
 - Add a confirmation detail panel that lists exactly what will be deleted before removal.
-- Add a simple ignore list for folders the user never wants scanned.
-- Add a CLI mode for headless cleanup on remote Linux machines.
 - Add a non-destructive preview mode that exports results to text or JSON.
-- Add a small status counter for total reclaimable size across all visible results, not just selected ones.
 - Add a few more tests around Windows read-only files and scan interruption behavior.
+- Add delete support to CLI mode with an explicit `--delete` confirmation flag.
 
 ## What I Would Not Add Yet
 
