@@ -48,7 +48,11 @@ def run_cli(
         return 1
 
     ignored_paths = () if not use_settings_ignores else settings.ignored_paths
-    targets = scan_targets(scan_root, ignored_paths=ignored_paths)
+    targets = sorted(
+        scan_targets(scan_root, ignored_paths=ignored_paths),
+        key=lambda t: t.size,
+        reverse=True,
+    )
     print(format_targets_table(targets))
 
     if ignored_paths:

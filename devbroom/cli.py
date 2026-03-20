@@ -57,9 +57,10 @@ def write_text_report(targets: list[ScanTarget], output_path: Path) -> None:
 
 def delete_targets(targets: list[ScanTarget], json_out: Path | None = None, yes: bool = False) -> int:
     total_size = human_size(sum(t.size for t in targets))
-    print(f"\nAbout to delete {len(targets)} folder(s) totaling {total_size}.")
+    print(f"\nAbout to delete {len(targets)} folder(s) totaling {total_size}:")
+    print(format_targets_table(targets))
     if not yes:
-        answer = input("Proceed? [y/N] ").strip().lower()
+        answer = input("\nProceed? [y/N] ").strip().lower()
         if answer not in ("y", "yes"):
             print("Aborted.")
             return 0

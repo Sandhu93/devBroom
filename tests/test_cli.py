@@ -277,6 +277,44 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
 
+    def test_run_cli_sorts_results_by_size_descending(self) -> None:
+        small = self.workdir / "a" / "node_modules"
+        small.mkdir(parents=True)
+        (small / "package.json").write_text("{}", encoding="ascii")
+
+        large = self.workdir / "b" / "node_modules"
+        large.mkdir(parents=True)
+        (large / "package.json").write_text("{}" * 5000, encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = run_cli(self.workdir, None, use_settings_ignores=False)
+
+        self.assertEqual(exit_code, 0)
+        output = buffer.getvalue()
+        large_pos = output.find(str(large))
+        small_pos = output.find(str(small))
+        self.assertGreater(large_pos, -1)
+        self.assertGreater(small_pos, -1)
+        self.assertLess(large_pos, small_pos, "larger folder should appear before smaller folder")
+
+    def test_delete_confirmation_shows_detail_table(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            with patch("builtins.input", return_value="n"):
+                exit_code = run_cli(self.workdir, None, use_settings_ignores=False, delete=True, yes=False)
+
+        output = buffer.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("TYPE", output)
+        self.assertIn(str(node_modules), output)
+        # PATH header must appear at least twice: once in scan table, once in detail table
+        self.assertGreaterEqual(output.count("PATH"), 2)
+
     def test_delete_aborts_on_no_confirmation(self) -> None:
         node_modules = self.workdir / "app" / "node_modules"
         node_modules.mkdir(parents=True)
