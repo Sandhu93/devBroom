@@ -130,6 +130,89 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.json_out, Path("out.json"))
         self.assertTrue(args.no_settings_ignores)
 
+    def test_build_parser_parses_delete_flags(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["--cli", "--path", "demo", "--delete", "--yes"])
+
+        self.assertTrue(args.delete)
+        self.assertTrue(args.yes)
+        self.assertFalse(args.dry_run)
+
+    def test_build_parser_parses_dry_run_flag(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["--cli", "--path", "demo", "--dry-run"])
+
+        self.assertTrue(args.dry_run)
+        self.assertFalse(args.delete)
+
+    def test_dry_run_prints_banner_and_does_not_delete(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = run_cli(self.workdir, None, use_settings_ignores=False, dry_run=True)
+
+        output = buffer.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("DRY RUN", output)
+        self.assertTrue(node_modules.exists(), "--dry-run must not delete anything")
+
+    def test_delete_with_yes_removes_targets(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = run_cli(self.workdir, None, use_settings_ignores=False, delete=True, yes=True)
+
+        output = buffer.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(node_modules.exists(), "node_modules should have been deleted")
+        self.assertIn("Deleted", output)
+
+    def test_delete_and_dry_run_are_mutually_exclusive(self) -> None:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = run_cli(self.workdir, None, use_settings_ignores=False, delete=True, dry_run=True)
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("mutually exclusive", buffer.getvalue())
+
+    def test_delete_writes_json_report(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+        report_path = self.workdir / "deleted.json"
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = run_cli(
+                self.workdir, report_path, use_settings_ignores=False, delete=True, yes=True
+            )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["deleted_count"], 1)
+        self.assertEqual(payload["failed_count"], 0)
+        self.assertEqual(len(payload["deleted"]), 1)
+
+    def test_delete_aborts_on_no_confirmation(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            with patch("builtins.input", return_value="n"):
+                exit_code = run_cli(self.workdir, None, use_settings_ignores=False, delete=True, yes=False)
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(node_modules.exists(), "node_modules should NOT be deleted when user says no")
+        self.assertIn("Aborted", buffer.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
