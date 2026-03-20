@@ -1,5 +1,7 @@
 # DevBroom
 
+> *An overengineered delete button that nobody asked for, built by someone who got tired of doing it manually.*
+
 DevBroom is a small cross-platform utility for reclaiming disk space from development dependencies.
 
 It scans a directory, finds removable folders such as `node_modules` and Python virtual environments, shows their estimated size, and lets you clean them through either:
