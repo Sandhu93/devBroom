@@ -20,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="Show what would be deleted without removing anything.")
     parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt when deleting.")
     parser.add_argument("--include-non-project", action="store_true", help="Include targets not inside a git repository (e.g. installed apps).")
+    parser.add_argument("--older-than", type=int, metavar="N", help="Only show targets not modified in the last N days.")
     return parser
 
 
@@ -51,6 +52,7 @@ def run_cli(
     dry_run: bool = False,
     yes: bool = False,
     include_non_project: bool = False,
+    older_than: int | None = None,
 ) -> int:
     if delete and dry_run:
         print("Error: --delete and --dry-run are mutually exclusive.")
@@ -64,7 +66,13 @@ def run_cli(
 
     ignored_paths = () if not use_settings_ignores else settings.ignored_paths
     targets = sorted(
-        scan_targets(scan_root, ignored_paths=ignored_paths, require_git_repo=not include_non_project),
+        scan_targets(
+            scan_root,
+            ignored_paths=ignored_paths,
+            require_git_repo=not include_non_project,
+            older_than=older_than,
+            show_progress=True,
+        ),
         key=lambda t: t.size,
         reverse=True,
     )
@@ -102,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             yes=args.yes,
             include_non_project=args.include_non_project,
+            older_than=args.older_than,
         )
 
     return run_gui()

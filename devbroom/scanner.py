@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from pathlib import Path
 
 from .models import (
@@ -35,6 +36,36 @@ def human_size(num_bytes: int) -> str:
             return f"{value:.1f} {unit}"
         value /= 1024
     return f"{value:.1f} PB"
+
+
+def human_age(days: float) -> str:
+    if days < 1:
+        return "< 1d"
+    if days < 30:
+        return f"{int(days)}d"
+    if days < 365:
+        return f"{int(days / 30)}mo"
+    return f"{days / 365:.1f}yr"
+
+
+def _calc_age_days(path: Path, kind: str) -> float:
+    """Return how many days ago the target was last meaningfully modified.
+
+    For virtualenvs, also checks Scripts/ and bin/ since pip updates those
+    subdirectories when installing packages, not the venv root itself.
+    Returns 0.0 on any OS error or if the mtime is in the future (clock skew).
+    """
+    try:
+        mtime = os.path.getmtime(path)
+        if kind == VENV_KIND:
+            for sub in ("Scripts", "bin"):
+                try:
+                    mtime = max(mtime, os.path.getmtime(path / sub))
+                except OSError:
+                    pass
+        return max(0.0, (time.time() - mtime) / 86400)
+    except OSError:
+        return 0.0
 
 
 def is_skip_parent(path: Path) -> bool:
@@ -100,12 +131,21 @@ def is_ignored_path(path: Path, ignored_paths: set[str]) -> bool:
     return False
 
 
-def iter_scan_targets(root: Path, stop_event: threading.Event, ignored_paths: list[str] | tuple[str, ...] | None = None, require_git_repo: bool = True):
+def iter_scan_targets(
+    root: Path,
+    stop_event: threading.Event,
+    ignored_paths: list[str] | tuple[str, ...] | None = None,
+    require_git_repo: bool = True,
+    older_than: int | None = None,
+    stats: dict | None = None,
+):
     visited_realpaths: set[str] = set()
     normalized_venv_names = {normalize_target_name(name) for name in VENV_NAMES}
     ignored_roots = {normalize_path_for_compare(path) for path in (ignored_paths or [])}
 
     for dirpath, dirnames, _ in os.walk(root.expanduser(), topdown=True, followlinks=False):
+        if stats is not None:
+            stats["visited"] += 1
         if stop_event.is_set():
             return
         current_path = Path(dirpath)
@@ -149,12 +189,18 @@ def iter_scan_targets(root: Path, stop_event: threading.Event, ignored_paths: li
                 pruned_names.append(dirname)
                 continue
 
+            age_days = _calc_age_days(candidate, matched_kind)
+            if older_than is not None and older_than > 0 and age_days < older_than:
+                pruned_names.append(dirname)
+                continue
+
             visited_realpaths.add(realpath)
             pruned_names.append(dirname)
             yield ScanTarget(
                 path=candidate,
                 kind=matched_kind,
                 size=safe_folder_size(candidate, stop_event),
+                age_days=age_days,
             )
 
         for dirname in pruned_names:

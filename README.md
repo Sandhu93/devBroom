@@ -180,10 +180,19 @@ Include targets that are not inside a git repository (e.g. when scanning an enti
 devbroom --cli --path /path/to/scan --include-non-project
 ```
 
+Only show targets that have not been modified in the last N days:
+
+```bash
+devbroom --cli --path /path/to/projects --older-than 90
+```
+
+This is useful for skipping active projects. A `node_modules` or virtualenv that has not had packages installed or removed in 90 days is a much safer deletion candidate than one that was touched yesterday.
+
 CLI output includes:
 
 - matching folders sorted by size (largest first)
-- estimated sizes
+- estimated sizes and age of each target
+- live progress indicator while scanning
 - total reclaimable size
 - optional JSON export
 
@@ -192,7 +201,10 @@ CLI output includes:
 - Scan a chosen directory recursively
 - Detect `node_modules`
 - Detect Python virtual environments such as `venv`, `.venv`, and `virtualenv`
-- Show estimated folder sizes before deletion
+- Show estimated folder sizes and age of each target before deletion
+- Filter results by age with `--older-than N` (CLI) or the age spinbox (GUI)
+- Live scan progress indicator in CLI mode
+- Non-blocking deletion with live per-item progress in the GUI
 - Selectively delete only the folders you choose
 - Remember last scanned path and preferred theme
 - Persist ignored scan paths

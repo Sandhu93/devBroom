@@ -334,6 +334,24 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
 
+    def test_format_targets_table_includes_age_column(self) -> None:
+        targets = [ScanTarget(path=Path("/tmp/project/node_modules"), kind=NODE_MODULES_NAME, size=1024, age_days=45.0)]
+        output = format_targets_table(targets)
+        self.assertIn("AGE", output)
+        self.assertIn("1mo", output)
+
+    def test_run_cli_older_than_filters_fresh_targets(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = run_cli(self.workdir, None, use_settings_ignores=False, older_than=3650)
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("No cleanup targets found.", buffer.getvalue())
+
     def test_run_cli_sorts_results_by_size_descending(self) -> None:
         small = self.workdir / "a" / "node_modules"
         small.mkdir(parents=True)
