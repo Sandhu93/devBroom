@@ -63,6 +63,15 @@ class ScannerTests(RepoTempDirTestCase):
         targets = list(iter_scan_targets(self.workdir, threading.Event()))
         self.assertEqual(targets, [])
 
+    def test_iter_scan_targets_skips_real_virtualenv_named_env(self) -> None:
+        env_path = self.workdir / "project" / "env"
+        env_path.mkdir(parents=True)
+        (env_path / "pyvenv.cfg").write_text("", encoding="ascii")
+
+        targets = list(iter_scan_targets(self.workdir, threading.Event()))
+
+        self.assertEqual(targets, [])
+
     def test_iter_scan_targets_skips_nested_env_in_node_modules(self) -> None:
         nested = self.workdir / "project" / NODE_MODULES_NAME / "pkg" / ".venv"
         nested.mkdir(parents=True)

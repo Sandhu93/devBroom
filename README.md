@@ -139,7 +139,7 @@ CLI output includes:
 
 - Scan a chosen directory recursively
 - Detect `node_modules`
-- Detect Python virtual environments such as `venv`, `.venv`, `env`, `.env`, and `virtualenv`
+- Detect Python virtual environments such as `venv`, `.venv`, and `virtualenv`
 - Show estimated folder sizes before deletion
 - Selectively delete only the folders you choose
 - Remember last scanned path and preferred theme
@@ -155,8 +155,6 @@ DevBroom scans for these targets:
 - `node_modules`
 - `venv`
 - `.venv`
-- `env`
-- `.env`
 - `virtualenv`
 
 Virtual environment candidates are only treated as real Python environments if they contain one of:
