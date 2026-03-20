@@ -192,6 +192,46 @@ The test suite is intentionally strongest around non-UI logic. Tkinter widget be
 - `tests/test_settings.py`: settings tests
 - `tests/test_cli.py`: CLI tests
 
+## Architecture
+
+```mermaid
+flowchart TD
+    A[main.py] --> B[devbroom.app.main]
+    B --> C{CLI mode?}
+
+    C -- No --> D[DevBroomApp Tkinter UI]
+    C -- Yes --> E[run_cli]
+
+    D --> F[Load settings]
+    D --> G[User actions]
+    G --> H[Start scan]
+    G --> I[Preview or export visible results]
+    G --> J[Delete selected results]
+    G --> K[Manage ignored paths and theme]
+
+    E --> F
+    E --> L[scan_targets]
+    E --> M[Console report]
+    E --> N[Optional JSON export]
+
+    H --> O[iter_scan_targets]
+    L --> O
+
+    O --> P[scanner.py]
+    P --> Q[Detect node_modules]
+    P --> R[Validate virtualenv folders]
+    P --> S[Apply ignored-path pruning]
+    P --> T[Estimate folder sizes]
+
+    D --> U[ui.py]
+    E --> V[cli.py]
+    J --> W[cleanup.py]
+    F --> X[settings.py]
+    P --> Y[models.py]
+    V --> Y
+    U --> Y
+```
+
 ## Known Limitations
 
 - Scans can be slow on very large directories because folder sizes are calculated recursively.
