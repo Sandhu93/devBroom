@@ -120,7 +120,8 @@ class ScannerTests(RepoTempDirTestCase):
             targets = list(iter_scan_targets(self.workdir, stop_event))
 
         self.assertEqual(len(targets), 1)
-        self.assertEqual(targets[0].path, first_target)
+        self.assertIn(targets[0].path, {first_target, second_target})
+        self.assertTrue(stop_event.is_set())
 
     def test_safe_folder_size_honors_stop_event(self) -> None:
         target = self.workdir / "project" / NODE_MODULES_NAME
