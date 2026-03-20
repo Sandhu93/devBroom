@@ -82,6 +82,14 @@ def safe_folder_size(path: Path, stop_event: threading.Event | None = None) -> i
     return total
 
 
+def is_inside_git_repo(path: Path) -> bool:
+    """Return True if path has a .git directory somewhere in its ancestry."""
+    for parent in path.parents:
+        if (parent / ".git").exists():
+            return True
+    return False
+
+
 def is_ignored_path(path: Path, ignored_paths: set[str]) -> bool:
     candidate = normalize_path_for_compare(path)
     for ignored in ignored_paths:
@@ -92,7 +100,7 @@ def is_ignored_path(path: Path, ignored_paths: set[str]) -> bool:
     return False
 
 
-def iter_scan_targets(root: Path, stop_event: threading.Event, ignored_paths: list[str] | tuple[str, ...] | None = None):
+def iter_scan_targets(root: Path, stop_event: threading.Event, ignored_paths: list[str] | tuple[str, ...] | None = None, require_git_repo: bool = True):
     visited_realpaths: set[str] = set()
     normalized_venv_names = {normalize_target_name(name) for name in VENV_NAMES}
     ignored_roots = {normalize_path_for_compare(path) for path in (ignored_paths or [])}
@@ -135,6 +143,10 @@ def iter_scan_targets(root: Path, stop_event: threading.Event, ignored_paths: li
                     matched_kind = VENV_KIND
 
             if not matched_kind:
+                continue
+
+            if require_git_repo and not is_inside_git_repo(candidate):
+                pruned_names.append(dirname)
                 continue
 
             visited_realpaths.add(realpath)

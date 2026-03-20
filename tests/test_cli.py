@@ -157,6 +157,43 @@ class CliTests(unittest.TestCase):
         self.assertTrue(args.dry_run)
         self.assertFalse(args.delete)
 
+    def test_build_parser_parses_include_non_project_flag(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["--cli", "--path", "demo", "--include-non-project"])
+
+        self.assertTrue(args.include_non_project)
+
+    def test_run_cli_excludes_targets_outside_git_repo_by_default(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            node_modules = tmp_path / "app" / "node_modules"
+            node_modules.mkdir(parents=True)
+            (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                exit_code = run_cli(tmp_path, None, use_settings_ignores=False)
+
+            self.assertEqual(exit_code, 0)
+            self.assertNotIn("node_modules", buffer.getvalue())
+            self.assertIn("No cleanup targets found.", buffer.getvalue())
+
+    def test_run_cli_includes_targets_outside_git_repo_with_flag(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            node_modules = tmp_path / "app" / "node_modules"
+            node_modules.mkdir(parents=True)
+            (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                exit_code = run_cli(tmp_path, None, use_settings_ignores=False, include_non_project=True)
+
+            self.assertEqual(exit_code, 0)
+            self.assertIn("node_modules", buffer.getvalue())
+
     def test_dry_run_prints_banner_and_does_not_delete(self) -> None:
         node_modules = self.workdir / "app" / "node_modules"
         node_modules.mkdir(parents=True)
