@@ -7,6 +7,32 @@ It scans a directory, finds removable folders such as `node_modules` and Python 
 - a Tkinter desktop UI
 - a headless CLI mode for remote or Linux server workflows
 
+## Installation
+
+```bash
+pip install devbroom
+```
+
+Requires Python 3.10 or newer.
+
+On Linux, Tkinter may need to be installed separately before the GUI will open (see [Quick Start → Linux](#linux) below).
+
+### Upgrade
+
+```bash
+pip install --upgrade devbroom
+```
+
+### Run from source
+
+If you prefer to clone the repo instead:
+
+```bash
+git clone https://github.com/Sandhu93/devBroom.git
+cd devBroom
+pip install -e .
+```
+
 ## Interface Preview
 
 ![DevBroom interface](./screenshot1.png)
@@ -66,21 +92,22 @@ flowchart TD
 
 ## Quick Start
 
+After `pip install devbroom`, the `devbroom` command is available system-wide.
+
 ### Windows
 
-Tkinter is usually included with the standard Python installer from python.org.
-
-Run:
-
 ```powershell
-python main.py
+devbroom          # opens the GUI
+devbroom --help   # show all CLI options
 ```
+
+Tkinter is included with the standard Python installer from python.org, so the GUI works out of the box.
 
 ### Linux
 
-Some Linux distributions do not include Tkinter by default.
+<a name="linux"></a>
 
-Install Tkinter if needed:
+Some Linux distributions do not include Tkinter by default. Install it before using the GUI:
 
 ```bash
 # Debian / Ubuntu
@@ -90,17 +117,18 @@ sudo apt install python3-tk
 sudo dnf install python3-tkinter
 ```
 
-Run:
+Then:
 
 ```bash
-python3 main.py
+devbroom          # opens the GUI
+devbroom --help   # show all CLI options
 ```
 
 ## How To Use The Application
 
 ### GUI Workflow
 
-1. Start the app with `python main.py` or `python3 main.py`.
+1. Start the app with `devbroom` (no flags).
 2. Choose the root directory you want to scan.
 3. Click `Scan`.
 4. Review the discovered cleanup candidates.
@@ -113,42 +141,48 @@ python3 main.py
 Basic scan:
 
 ```bash
-python3 main.py --cli --path /path/to/projects
+devbroom --cli --path /path/to/projects
 ```
 
 Skip saved ignore paths for one run:
 
 ```bash
-python3 main.py --cli --path /path/to/projects --no-settings-ignores
+devbroom --cli --path /path/to/projects --no-settings-ignores
 ```
 
 Export results to JSON:
 
 ```bash
-python3 main.py --cli --path /path/to/projects --json-out scan-report.json
+devbroom --cli --path /path/to/projects --json-out scan-report.json
 ```
 
 Preview what would be deleted without removing anything:
 
 ```bash
-python3 main.py --cli --path /path/to/projects --dry-run
+devbroom --cli --path /path/to/projects --dry-run
 ```
 
 Delete all discovered targets (with confirmation prompt):
 
 ```bash
-python3 main.py --cli --path /path/to/projects --delete
+devbroom --cli --path /path/to/projects --delete
 ```
 
 Delete all discovered targets without a confirmation prompt:
 
 ```bash
-python3 main.py --cli --path /path/to/projects --delete --yes
+devbroom --cli --path /path/to/projects --delete --yes
+```
+
+Include targets that are not inside a git repository (e.g. when scanning an entire drive):
+
+```bash
+devbroom --cli --path /path/to/scan --include-non-project
 ```
 
 CLI output includes:
 
-- matching folders
+- matching folders sorted by size (largest first)
 - estimated sizes
 - total reclaimable size
 - optional JSON export
@@ -182,6 +216,8 @@ Virtual environment candidates are only treated as real Python environments if t
 - `bin/activate`
 
 This prevents deleting unrelated folders that only happen to use a common virtualenv-like name.
+
+By default, devBroom only surfaces targets that live inside a git repository. This prevents folders bundled inside installed applications (VS Code, Arduino IDE, pgAdmin, etc.) from appearing as cleanup candidates. Pass `--include-non-project` to disable this filter.
 
 The scanner also skips likely nested package locations such as:
 
@@ -272,10 +308,9 @@ The suite is intentionally strongest around non-UI logic. Tkinter widget behavio
 
 ## Good Next Modifications
 
-- Add an option to sort by largest folders first immediately after scan completion.
-- Add a confirmation detail panel that lists exactly what will be deleted before removal.
-- Add CSV export if you want results to be easier to open in spreadsheets.
-- Add packaging/install steps once the feature set stabilizes.
+- Add CSV export for results that are easier to open in spreadsheets.
+- Add a GUI toggle to include or exclude non-project targets (currently CLI-only via `--include-non-project`).
+- Add a progress indicator showing scan depth or folders visited for large directory trees.
 
 ## Contributing
 
@@ -295,7 +330,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
 - background worker processes
 - plugin architecture
 - heavy UI automation for the current Tkinter surface
-- an installer/package distribution workflow before the behavior stabilizes
 
 ## Engineering Decisions
 
