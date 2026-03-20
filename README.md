@@ -11,19 +11,6 @@ It scans a directory, finds removable folders such as `node_modules` and Python 
 
 Developer machines and shared workstations tend to accumulate large dependency folders that are safe to rebuild but expensive to keep. DevBroom focuses on that narrow but common cleanup problem: identify heavyweight development artifacts quickly, show the likely reclaimable space, and let the user clean them without touching real application code. The result is a small, practical tool that demonstrates filesystem traversal, cross-platform behavior, GUI/CLI dual-mode design, and safety-oriented cleanup logic in one project.
 
-## Feature Screenshot
-
-The repository is structured to support a visual desktop workflow:
-
-- scan a chosen root directory
-- review discovered dependency folders
-- filter, preview, and export visible results
-- delete selected folders with confirmation
-
-Screenshot asset note:
-
-- add a committed screenshot file later if you want the GitHub page to render the actual UI inline
-- a good future path would be something like `docs/images/devbroom-ui.png`
 
 ## Architecture
 
@@ -65,7 +52,7 @@ flowchart TD
     U --> Y
 ```
 
-## What A Recruiter Or User Should Know First
+## What A User Should Know First
 
 - Problem solved: developer machines accumulate large dependency folders that are safe to rebuild but expensive to keep.
 - Primary value: quickly find and remove disk-heavy dependency directories without touching application source code.
