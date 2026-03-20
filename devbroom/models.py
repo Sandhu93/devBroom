@@ -22,3 +22,4 @@ class ScanTarget:
     path: Path
     kind: str
     size: int
+    age_days: float = 0.0

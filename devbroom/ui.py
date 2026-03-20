@@ -10,7 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 from .cli import format_targets_table, write_json_report, write_text_report
 from .cleanup import delete_tree
 from .models import NODE_MODULES_NAME, VENV_KIND, ScanTarget
-from .scanner import human_size, iter_scan_targets
+from .scanner import human_age, human_size, iter_scan_targets
 from .settings import AppSettings, save_settings
 
 
@@ -116,6 +116,7 @@ class DevBroomApp(tk.Tk):
     COL_CHECK = "Pick"
     COL_TYPE = "Type"
     COL_SIZE = "Size"
+    COL_AGE = "Age"
     COL_PATH = "Path"
 
     def __init__(self, settings: AppSettings | None = None) -> None:
@@ -144,6 +145,7 @@ class DevBroomApp(tk.Tk):
         self._ignored_var = tk.StringVar(value=self._ignored_summary_text())
         self._show_node = tk.BooleanVar(value=True)
         self._show_venv = tk.BooleanVar(value=True)
+        self._older_than_var = tk.StringVar(value="0")
         self._theme_name = tk.StringVar(value=theme_name)
         self._ui_font, self._mono_font = preferred_ui_fonts()
         self._theme = LIGHT_THEME if theme_name == "light" else DARK_THEME
@@ -274,6 +276,27 @@ class DevBroomApp(tk.Tk):
         )
         self._venv_filter.pack(side="left")
 
+        self._age_sep = tk.Label(self._filters_wrap, text="|", font=(self._ui_font, 9))
+        self._age_sep.pack(side="left", padx=(4, 6))
+
+        self._age_label = tk.Label(self._filters_wrap, text="Older than:", font=(self._ui_font, 9))
+        self._age_label.pack(side="left")
+
+        self._age_spinbox = tk.Spinbox(
+            self._filters_wrap,
+            from_=0,
+            to=9999,
+            width=5,
+            textvariable=self._older_than_var,
+            font=(self._ui_font, 9),
+            relief="flat",
+        )
+        self._age_spinbox.pack(side="left", padx=(4, 2))
+        self._older_than_var.trace_add("write", lambda *_: self._apply_filter())
+
+        self._age_unit_label = tk.Label(self._filters_wrap, text="days", font=(self._ui_font, 9))
+        self._age_unit_label.pack(side="left")
+
         self._controls_row = tk.Frame(self._controls_card)
         self._controls_row.pack(fill="x", pady=(12, 0))
 
@@ -342,7 +365,7 @@ class DevBroomApp(tk.Tk):
         self._table_frame = tk.Frame(self._results_card, padx=18, pady=0)
         self._table_frame.pack(fill="both", expand=True, pady=(0, 18))
 
-        columns = (self.COL_CHECK, self.COL_TYPE, self.COL_SIZE, self.COL_PATH)
+        columns = (self.COL_CHECK, self.COL_TYPE, self.COL_SIZE, self.COL_AGE, self.COL_PATH)
         self._tree = ttk.Treeview(
             self._table_frame,
             columns=columns,
@@ -354,12 +377,14 @@ class DevBroomApp(tk.Tk):
         self._tree.heading(self.COL_CHECK, text="All", command=self._toggle_all)
         self._tree.heading(self.COL_TYPE, text="Type")
         self._tree.heading(self.COL_SIZE, text="Size", command=lambda: self._sort("size"))
+        self._tree.heading(self.COL_AGE, text="Age", command=lambda: self._sort("age"))
         self._tree.heading(self.COL_PATH, text="Path", command=lambda: self._sort("path"))
 
         self._tree.column(self.COL_CHECK, width=82, stretch=False, anchor="center")
         self._tree.column(self.COL_TYPE, width=140, stretch=False, anchor="center")
         self._tree.column(self.COL_SIZE, width=110, stretch=False, anchor="e")
-        self._tree.column(self.COL_PATH, width=820, stretch=True)
+        self._tree.column(self.COL_AGE, width=72, stretch=False, anchor="e")
+        self._tree.column(self.COL_PATH, width=756, stretch=True)
 
         vsb = ttk.Scrollbar(self._table_frame, orient="vertical", command=self._tree.yview)
         hsb = ttk.Scrollbar(self._table_frame, orient="horizontal", command=self._tree.xview)
@@ -463,6 +488,18 @@ class DevBroomApp(tk.Tk):
             activebackground=theme.surface,
             activeforeground=theme.text,
             selectcolor=theme.surface_alt,
+        )
+        self._age_sep.config(bg=theme.surface, fg=theme.border)
+        self._age_label.config(bg=theme.surface, fg=theme.text_muted)
+        self._age_unit_label.config(bg=theme.surface, fg=theme.text_muted)
+        self._age_spinbox.config(
+            bg=theme.field_bg,
+            fg=theme.text,
+            insertbackground=theme.text,
+            buttonbackground=theme.surface_muted,
+            disabledbackground=theme.field_bg,
+            disabledforeground=theme.text_muted,
+            relief="flat",
         )
 
         self._refresh_all_buttons()
@@ -650,7 +687,7 @@ class DevBroomApp(tk.Tk):
         iid = self._tree.insert(
             "",
             "end",
-            values=(UNCHECKED_MARK, label, human_size(target.size), str(target.path)),
+            values=(UNCHECKED_MARK, label, human_size(target.size), human_age(target.age_days), str(target.path)),
             tags=(tag,),
         )
         self._items[iid] = target
@@ -660,9 +697,15 @@ class DevBroomApp(tk.Tk):
 
     def _apply_filter_to_item(self, iid: str) -> None:
         target = self._items[iid]
-        show_item = (target.kind == NODE_MODULES_NAME and self._show_node.get()) or (
+        kind_visible = (target.kind == NODE_MODULES_NAME and self._show_node.get()) or (
             target.kind == VENV_KIND and self._show_venv.get()
         )
+        try:
+            min_age = int(self._older_than_var.get())
+        except ValueError:
+            min_age = 0
+        age_visible = min_age <= 0 or target.age_days >= min_age
+        show_item = kind_visible and age_visible
         if show_item:
             if iid not in self._tree.get_children():
                 self._tree.reattach(iid, "", "end")
@@ -732,7 +775,12 @@ class DevBroomApp(tk.Tk):
         sortable = []
         for iid in self._tree.get_children():
             target = self._items[iid]
-            value = target.size if key == "size" else str(target.path).casefold()
+            if key == "size":
+                value = target.size
+            elif key == "age":
+                value = target.age_days
+            else:
+                value = str(target.path).casefold()
             sortable.append((value, iid))
 
         sortable.sort(reverse=descending)
@@ -858,38 +906,61 @@ class DevBroomApp(tk.Tk):
         if not self._confirm_deletion_panel(targets, total_size):
             return
 
-        deleted = 0
-        freed_bytes = 0
-        failures: list[str] = []
+        total = len(targets)
+        self._del_btn.config(state="disabled")
+        self._btn_scan.config(state="disabled")
+        self._btn_stop.config(state="disabled")
+        self._refresh_all_buttons()
+        self._progress.start(12)
+        self._status_var.set(f"Deleting 0 of {total} ...")
 
-        for iid in selected_ids:
-            target = self._items[iid]
-            try:
-                delete_tree(target.path)
-            except Exception as exc:
-                failures.append(f"{target.path}\n  - {exc}")
-                continue
+        def _do_delete() -> None:
+            deleted = 0
+            freed_bytes = 0
+            failures: list[str] = []
 
-            freed_bytes += target.size
-            deleted += 1
-            self._tree.delete(iid)
-            del self._items[iid]
-            del self._row_tags[iid]
+            for i, (iid, target) in enumerate(zip(selected_ids, targets)):
+                if self.winfo_exists():
+                    self.after(0, self._status_var.set, f"Deleting {i + 1} of {total}: {target.path.name} ...")
+                try:
+                    delete_tree(target.path)
+                    freed_bytes += target.size
+                    deleted += 1
+                    if self.winfo_exists():
+                        self.after(0, _remove_row, iid)
+                except Exception as exc:
+                    failures.append(f"{target.path}\n  - {exc}")
+
+            if self.winfo_exists():
+                self.after(0, _finish, deleted, freed_bytes, failures)
+
+        def _remove_row(iid: str) -> None:
+            if iid in self._tree.get_children():
+                self._tree.delete(iid)
+            self._items.pop(iid, None)
+            self._row_tags.pop(iid, None)
             self._checked.discard(iid)
 
-        message = f"Deleted {deleted} folder(s). Reclaimed {human_size(freed_bytes)}."
-        if failures:
-            message += f"\n\n{len(failures)} deletion(s) failed:\n" + "\n".join(failures)
-            messagebox.showwarning("Partial success", message)
-        else:
-            messagebox.showinfo("Done", message)
+        def _finish(deleted: int, freed_bytes: int, failures: list[str]) -> None:
+            self._progress.stop()
+            self._btn_scan.config(state="normal")
+            self._refresh_all_buttons()
 
-        self._found_var.set(f"{len(self._items)} folders found")
-        self._update_summary()
-        remaining_bytes = sum(target.size for target in self._items.values())
-        self._status_var.set(
-            f"Deleted {deleted} folder(s). {len(self._items)} remaining ({human_size(remaining_bytes)})."
-        )
+            message = f"Deleted {deleted} folder(s). Reclaimed {human_size(freed_bytes)}."
+            if failures:
+                message += f"\n\n{len(failures)} deletion(s) failed:\n" + "\n".join(failures)
+                messagebox.showwarning("Partial success", message)
+            else:
+                messagebox.showinfo("Done", message)
+
+            self._found_var.set(f"{len(self._items)} folders found")
+            self._update_summary()
+            remaining_bytes = sum(target.size for target in self._items.values())
+            self._status_var.set(
+                f"Deleted {deleted} folder(s). {len(self._items)} remaining ({human_size(remaining_bytes)})."
+            )
+
+        threading.Thread(target=_do_delete, daemon=True).start()
 
     def _on_close(self) -> None:
         self._stop_event.set()

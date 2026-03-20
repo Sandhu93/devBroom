@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from devbroom.models import NODE_MODULES_NAME, VENV_KIND
-from devbroom.scanner import human_size, is_inside_git_repo, is_virtualenv, iter_scan_targets, safe_folder_size
+from devbroom.scanner import human_age, human_size, is_inside_git_repo, is_virtualenv, iter_scan_targets, safe_folder_size
 
 
 TEST_ROOT = Path(__file__).resolve().parent / ".tmp"
@@ -163,6 +163,41 @@ class ScannerTests(RepoTempDirTestCase):
     def test_is_inside_git_repo_returns_false_outside_any_repo(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             self.assertFalse(is_inside_git_repo(Path(tmpdir)))
+
+    def test_scan_target_has_non_negative_age_days(self) -> None:
+        node_modules = self.workdir / "app" / NODE_MODULES_NAME
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        targets = list(iter_scan_targets(self.workdir, threading.Event()))
+
+        self.assertEqual(len(targets), 1)
+        self.assertGreaterEqual(targets[0].age_days, 0.0)
+
+    def test_iter_scan_targets_older_than_excludes_fresh_target(self) -> None:
+        node_modules = self.workdir / "app" / NODE_MODULES_NAME
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        # older_than=3650 (10 years) — a freshly created folder should be filtered out
+        targets = list(iter_scan_targets(self.workdir, threading.Event(), older_than=3650))
+
+        self.assertEqual(targets, [], "A freshly created folder should not appear with older_than=3650")
+
+    def test_iter_scan_targets_older_than_zero_shows_all(self) -> None:
+        node_modules = self.workdir / "app" / NODE_MODULES_NAME
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        targets = list(iter_scan_targets(self.workdir, threading.Event(), older_than=0))
+
+        self.assertEqual(len(targets), 1)
+
+    def test_human_age_formats_days(self) -> None:
+        self.assertEqual(human_age(0.5), "< 1d")
+        self.assertEqual(human_age(14), "14d")
+        self.assertEqual(human_age(45), "1mo")
+        self.assertEqual(human_age(365), "1.0yr")
 
     def test_safe_folder_size_honors_stop_event(self) -> None:
         target = self.workdir / "project" / NODE_MODULES_NAME
