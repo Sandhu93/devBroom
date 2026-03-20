@@ -130,6 +130,7 @@ class DevBroomApp(tk.Tk):
         self._stop_event = threading.Event()
         self._scanning = False
         self._sort_state = {"key": "size", "descending": True}
+        self._ignored_paths = list(dict.fromkeys(settings.ignored_paths))
 
         default_path = settings.last_path.strip() or str(Path.home())
         theme_name = settings.theme if settings.theme in {"light", "dark"} else "dark"
@@ -139,6 +140,7 @@ class DevBroomApp(tk.Tk):
         self._summary_var = tk.StringVar(value="No folders selected")
         self._found_var = tk.StringVar(value="0 folders found")
         self._visible_total_var = tk.StringVar(value="0 B visible")
+        self._ignored_var = tk.StringVar(value=self._ignored_summary_text())
         self._show_node = tk.BooleanVar(value=True)
         self._show_venv = tk.BooleanVar(value=True)
         self._theme_name = tk.StringVar(value=theme_name)
@@ -241,6 +243,13 @@ class DevBroomApp(tk.Tk):
         )
         self._scan_label.pack(side="left")
 
+        self._ignored_label = tk.Label(
+            self._controls_top,
+            textvariable=self._ignored_var,
+            font=(self._ui_font, 9),
+        )
+        self._ignored_label.pack(side="left", padx=(16, 0))
+
         self._filters_wrap = tk.Frame(self._controls_top)
         self._filters_wrap.pack(side="right")
 
@@ -285,6 +294,12 @@ class DevBroomApp(tk.Tk):
         self._btn_stop = self._make_button(self._controls_row, "Stop", self._stop_scan)
         self._btn_stop.pack(side="left")
         self._btn_stop.config(state="disabled")
+
+        self._btn_ignore = self._make_button(self._controls_row, "Ignore Folder", self._add_ignored_path)
+        self._btn_ignore.pack(side="left", padx=(10, 8))
+
+        self._btn_clear_ignores = self._make_button(self._controls_row, "Clear Ignores", self._clear_ignored_paths)
+        self._btn_clear_ignores.pack(side="left")
 
         self._results_card = tk.Frame(self, padx=0, pady=0, highlightthickness=1)
         self._results_card.pack(fill="both", expand=True, padx=24, pady=(0, 14))
@@ -417,6 +432,7 @@ class DevBroomApp(tk.Tk):
         self._visible_total_label.config(bg=theme.surface, fg=theme.text_muted)
         self._status_label.config(bg=theme.surface, fg=theme.text_muted)
         self._scan_label.config(bg=theme.surface, fg=theme.text_muted)
+        self._ignored_label.config(bg=theme.surface, fg=theme.text_muted)
         self._results_title.config(bg=theme.surface, fg=theme.text)
 
         self._path_entry.config(
@@ -451,6 +467,8 @@ class DevBroomApp(tk.Tk):
             self._btn_browse,
             self._btn_scan,
             self._btn_stop,
+            self._btn_ignore,
+            self._btn_clear_ignores,
             self._sel_all_btn,
             self._desel_btn,
             self._del_btn,
@@ -593,7 +611,7 @@ class DevBroomApp(tk.Tk):
                 self.after(0, self._status_var.set, f"Found {count} folder(s) so far ...")
                 self.after(0, self._found_var.set, f"{count} folders found")
 
-        for target in iter_scan_targets(root, self._stop_event):
+        for target in iter_scan_targets(root, self._stop_event, ignored_paths=self._ignored_paths):
             if self._stop_event.is_set():
                 break
             on_found(target)
@@ -785,7 +803,11 @@ class DevBroomApp(tk.Tk):
         self.destroy()
 
     def _save_preferences(self) -> None:
-        settings = AppSettings(last_path=self._path_var.get().strip(), theme=self._theme.name)
+        settings = AppSettings(
+            last_path=self._path_var.get().strip(),
+            theme=self._theme.name,
+            ignored_paths=tuple(self._ignored_paths),
+        )
         try:
             save_settings(settings)
         except OSError:
@@ -795,3 +817,35 @@ class DevBroomApp(tk.Tk):
         visible_ids = self._tree.get_children()
         visible_total = sum(self._items[iid].size for iid in visible_ids if iid in self._items)
         self._visible_total_var.set(f"{human_size(visible_total)} visible")
+
+    def _ignored_summary_text(self) -> str:
+        count = len(self._ignored_paths)
+        return f"{count} ignored folder{'s' if count != 1 else ''}"
+
+    def _add_ignored_path(self) -> None:
+        directory = filedialog.askdirectory(initialdir=self._path_var.get())
+        if not directory:
+            return
+
+        normalized = str(Path(directory).expanduser().resolve(strict=False))
+        if normalized not in self._ignored_paths:
+            self._ignored_paths.append(normalized)
+            self._ignored_var.set(self._ignored_summary_text())
+            self._save_preferences()
+            self._status_var.set(f"Added ignore path: {normalized}")
+
+    def _clear_ignored_paths(self) -> None:
+        if not self._ignored_paths:
+            return
+        confirmed = messagebox.askyesno(
+            "Clear ignores",
+            "Remove all ignored paths from settings?",
+            icon="question",
+        )
+        if not confirmed:
+            return
+
+        self._ignored_paths.clear()
+        self._ignored_var.set(self._ignored_summary_text())
+        self._save_preferences()
+        self._status_var.set("Cleared ignored paths.")

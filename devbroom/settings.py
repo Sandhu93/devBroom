@@ -14,6 +14,7 @@ DEFAULT_SETTINGS_FILENAME = ".devbroom.json"
 class AppSettings:
     last_path: str = ""
     theme: str = "dark"
+    ignored_paths: tuple[str, ...] = ()
 
 
 def settings_file_path() -> Path:
@@ -38,7 +39,20 @@ def load_settings(path: Path | None = None) -> AppSettings:
     if not isinstance(last_path, str):
         last_path = ""
 
-    return AppSettings(last_path=last_path, theme=theme)
+    ignored_paths = raw.get("ignored_paths", [])
+    if not isinstance(ignored_paths, list):
+        ignored_paths = []
+
+    normalized_ignored_paths: list[str] = []
+    for value in ignored_paths:
+        if isinstance(value, str) and value.strip():
+            normalized_ignored_paths.append(value.strip())
+
+    return AppSettings(
+        last_path=last_path,
+        theme=theme,
+        ignored_paths=tuple(normalized_ignored_paths),
+    )
 
 
 def save_settings(settings: AppSettings, path: Path | None = None) -> None:

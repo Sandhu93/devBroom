@@ -32,7 +32,11 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings, AppSettings())
 
     def test_save_and_load_round_trip(self) -> None:
-        expected = AppSettings(last_path="D:/projects/demo", theme="light")
+        expected = AppSettings(
+            last_path="D:/projects/demo",
+            theme="light",
+            ignored_paths=("D:/projects/demo/node_modules", "D:/projects/cache"),
+        )
         save_settings(expected, self.settings_file)
         loaded = load_settings(self.settings_file)
         self.assertEqual(loaded, expected)
@@ -44,11 +48,11 @@ class SettingsTests(unittest.TestCase):
 
     def test_load_settings_normalizes_invalid_values(self) -> None:
         self.settings_file.write_text(
-            json.dumps({"last_path": 123, "theme": "midnight"}),
+            json.dumps({"last_path": 123, "theme": "midnight", "ignored_paths": "bad"}),
             encoding="utf-8",
         )
         settings = load_settings(self.settings_file)
-        self.assertEqual(settings, AppSettings(last_path="", theme="dark"))
+        self.assertEqual(settings, AppSettings(last_path="", theme="dark", ignored_paths=()))
 
 
 if __name__ == "__main__":

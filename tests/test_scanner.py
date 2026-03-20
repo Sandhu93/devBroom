@@ -72,6 +72,27 @@ class ScannerTests(RepoTempDirTestCase):
         self.assertEqual(len(targets), 1)
         self.assertEqual(targets[0].kind, NODE_MODULES_NAME)
 
+    def test_iter_scan_targets_respects_ignored_paths(self) -> None:
+        ignored_root = self.workdir / "ignored"
+        node_modules = ignored_root / NODE_MODULES_NAME
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        kept_root = self.workdir / "kept"
+        kept_node_modules = kept_root / NODE_MODULES_NAME
+        kept_node_modules.mkdir(parents=True)
+        (kept_node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        targets = list(
+            iter_scan_targets(
+                self.workdir,
+                threading.Event(),
+                ignored_paths=[str(ignored_root)],
+            )
+        )
+
+        self.assertEqual([target.path for target in targets], [kept_node_modules])
+
 
 if __name__ == "__main__":
     unittest.main()

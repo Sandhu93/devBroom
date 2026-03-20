@@ -23,6 +23,11 @@ def normalize_target_name(name: str) -> str:
     return name.casefold() if is_case_insensitive_filesystem() else name
 
 
+def normalize_path_for_compare(path: Path | str) -> str:
+    normalized = os.path.realpath(Path(path))
+    return normalized.casefold() if is_case_insensitive_filesystem() else normalized
+
+
 def human_size(num_bytes: int) -> str:
     value = float(max(0, num_bytes))
     for unit in ("B", "KB", "MB", "GB", "TB"):
@@ -77,17 +82,35 @@ def safe_folder_size(path: Path, stop_event: threading.Event | None = None) -> i
     return total
 
 
-def iter_scan_targets(root: Path, stop_event: threading.Event):
+def is_ignored_path(path: Path, ignored_paths: set[str]) -> bool:
+    candidate = normalize_path_for_compare(path)
+    for ignored in ignored_paths:
+        if candidate == ignored:
+            return True
+        if candidate.startswith(ignored + os.sep):
+            return True
+    return False
+
+
+def iter_scan_targets(root: Path, stop_event: threading.Event, ignored_paths: list[str] | tuple[str, ...] | None = None):
     visited_realpaths: set[str] = set()
     normalized_venv_names = {normalize_target_name(name) for name in VENV_NAMES}
+    ignored_roots = {normalize_path_for_compare(path) for path in (ignored_paths or [])}
 
     for dirpath, dirnames, _ in os.walk(root.expanduser(), topdown=True, followlinks=False):
         if stop_event.is_set():
             return
+        current_path = Path(dirpath)
+        if is_ignored_path(current_path, ignored_roots):
+            dirnames[:] = []
+            continue
 
         pruned_names: list[str] = []
         for dirname in list(dirnames):
             candidate = Path(dirpath, dirname)
+            if is_ignored_path(candidate, ignored_roots):
+                pruned_names.append(dirname)
+                continue
 
             try:
                 if candidate.is_symlink():
