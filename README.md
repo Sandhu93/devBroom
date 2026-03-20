@@ -261,6 +261,18 @@ The suite is intentionally strongest around non-UI logic. Tkinter widget behavio
 - Add CSV export if you want results to be easier to open in spreadsheets.
 - Add packaging/install steps once the feature set stabilizes.
 
+## Contributing
+
+Contributions, fixes, and small usability improvements are welcome.
+
+If you want to contribute:
+
+- open an issue for bugs or feature ideas
+- keep pull requests focused and easy to review
+- run the test suite before submitting
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
+
 ## What I Would Not Add Yet
 
 - a database
