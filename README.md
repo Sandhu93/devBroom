@@ -7,10 +7,13 @@ It scans a directory, finds removable folders such as `node_modules` and Python 
 - a Tkinter desktop UI
 - a headless CLI mode for remote or Linux server workflows
 
+## Interface Preview
+
+![DevBroom interface](./screenshot1.png)
+
 ## Why This Project Matters
 
 Developer machines and shared workstations tend to accumulate large dependency folders that are safe to rebuild but expensive to keep. DevBroom focuses on that narrow but common cleanup problem: identify heavyweight development artifacts quickly, show the likely reclaimable space, and let the user clean them without touching real application code. The result is a small, practical tool that demonstrates filesystem traversal, cross-platform behavior, GUI/CLI dual-mode design, and safety-oriented cleanup logic in one project.
-
 
 ## Architecture
 
