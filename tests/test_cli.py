@@ -14,6 +14,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+import re
+
+from devbroom import __version__
 from devbroom.app import build_parser, run_cli
 from devbroom.cli import format_targets_table, write_json_report, write_text_report
 from devbroom.models import NODE_MODULES_NAME, ScanTarget, VENV_KIND
@@ -120,6 +123,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn(str(ignored_target), output)
         self.assertNotIn("Using 1 ignored path(s).", output)
+
+    def test_version_is_non_empty_semver_string(self) -> None:
+        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
+
+    def test_version_flag_prints_version_and_exits(self) -> None:
+        parser = build_parser()
+        with self.assertRaises(SystemExit) as ctx:
+            parser.parse_args(["--version"])
+        self.assertEqual(ctx.exception.code, 0)
 
     def test_build_parser_parses_cli_arguments(self) -> None:
         parser = build_parser()

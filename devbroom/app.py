@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from . import __version__
 from .cli import delete_targets, format_targets_table, scan_targets, write_json_report
 from .scanner import human_size
 from .settings import load_settings
@@ -10,6 +11,7 @@ from .settings import load_settings
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="DevBroom: clean development dependency folders.")
+    parser.add_argument("--version", "-V", action="version", version=f"devBroom {__version__}")
     parser.add_argument("--cli", action="store_true", help="Run in headless CLI mode.")
     parser.add_argument("--path", type=Path, help="Root directory to scan.")
     parser.add_argument("--json-out", type=Path, help="Write scan results to a JSON file.")
