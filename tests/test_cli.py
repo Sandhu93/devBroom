@@ -263,11 +263,31 @@ class CliTests(unittest.TestCase):
         self.assertIn("node_modules", buffer.getvalue())
 
     def test_main_routes_to_gui(self) -> None:
-        with patch("devbroom.app.run_gui") as mock_gui:
+        with patch("devbroom.app.run_gui", return_value=0) as mock_gui:
             exit_code = main([])
 
         mock_gui.assert_called_once()
         self.assertEqual(exit_code, 0)
+
+    def test_main_returns_error_when_tkinter_unavailable(self) -> None:
+        buffer = io.StringIO()
+        with patch("devbroom.app.run_gui", return_value=1):
+            with redirect_stdout(buffer):
+                exit_code = main([])
+
+        self.assertEqual(exit_code, 1)
+
+    def test_run_gui_prints_helpful_message_when_tkinter_missing(self) -> None:
+        from devbroom.app import run_gui
+
+        buffer = io.StringIO()
+        with patch("builtins.__import__", side_effect=ImportError("No module named '_tkinter'")):
+            with redirect_stdout(buffer):
+                exit_code = run_gui()
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("tkinter", buffer.getvalue())
+        self.assertIn("--cli", buffer.getvalue())
 
     def test_main_no_settings_ignores_inverts_to_false(self) -> None:
         node_modules = self.workdir / "app" / "node_modules"

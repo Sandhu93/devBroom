@@ -23,11 +23,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_gui() -> None:
-    from .ui import DevBroomApp
+def run_gui() -> int:
+    try:
+        from .ui import DevBroomApp
+    except ImportError:
+        print("Error: the GUI requires tkinter, which is not available on this system.")
+        print("")
+        print("  Install tkinter:")
+        print("    Debian/Ubuntu:  sudo apt install python3-tk")
+        print("    Fedora:         sudo dnf install python3-tkinter")
+        print("    Termux:         pkg install python-tkinter")
+        print("")
+        print("  Or use CLI mode instead:")
+        print("    devbroom --cli --path /path/to/your/projects")
+        return 1
 
     app = DevBroomApp(settings=load_settings())
     app.mainloop()
+    return 0
 
 
 def run_cli(
@@ -91,5 +104,4 @@ def main(argv: list[str] | None = None) -> int:
             include_non_project=args.include_non_project,
         )
 
-    run_gui()
-    return 0
+    return run_gui()
