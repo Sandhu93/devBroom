@@ -6,7 +6,6 @@ from pathlib import Path
 from .cli import format_targets_table, scan_targets, write_json_report
 from .scanner import human_size
 from .settings import load_settings
-from .ui import DevBroomApp
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -19,6 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_gui() -> None:
+    from .ui import DevBroomApp
+
     app = DevBroomApp(settings=load_settings())
     app.mainloop()
 
