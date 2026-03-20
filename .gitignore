@@ -1,13 +1,28 @@
-__pycache__/
-*.py[cod]
+# Local scripts — stay on your machine, never pushed
+release.py
 
-tests/.tmp/
-
-.devbroom.json
-
+# Local notes
 LOCAL_DEVBROOM_DEEP_DIVE.md
+
+# User settings
+.devbroom.json
 
 # Build artifacts
 *.egg-info/
 dist/
 build/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Test temp dirs
+tests/.tmp/
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
