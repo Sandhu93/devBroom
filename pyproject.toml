@@ -7,7 +7,7 @@ name = "devbroom"
 dynamic = ["version"]
 description = "Clean development dependency folders (node_modules, virtual envs) to reclaim disk space."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.10"
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -18,7 +18,6 @@ classifiers = [
   "Topic :: Utilities",
   "Topic :: System :: Filesystems",
   "Environment :: Console",
-  "License :: OSI Approved :: MIT License",
 ]
 
 [project.urls]
