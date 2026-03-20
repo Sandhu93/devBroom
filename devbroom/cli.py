@@ -4,6 +4,7 @@ import json
 import threading
 from pathlib import Path
 
+from .cleanup import delete_tree
 from .models import ScanTarget
 from .scanner import human_size, iter_scan_targets
 
@@ -52,6 +53,45 @@ def format_targets_table(targets: list[ScanTarget]) -> str:
 def write_text_report(targets: list[ScanTarget], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(format_targets_table(targets) + "\n", encoding="utf-8")
+
+
+def delete_targets(targets: list[ScanTarget], json_out: Path | None = None, yes: bool = False) -> int:
+    total_size = human_size(sum(t.size for t in targets))
+    print(f"\nAbout to delete {len(targets)} folder(s) totaling {total_size}.")
+    if not yes:
+        answer = input("Proceed? [y/N] ").strip().lower()
+        if answer not in ("y", "yes"):
+            print("Aborted.")
+            return 0
+
+    succeeded: list[ScanTarget] = []
+    failed: list[tuple[ScanTarget, str]] = []
+    for target in targets:
+        try:
+            delete_tree(target.path)
+            succeeded.append(target)
+            print(f"  Deleted  {target.path}")
+        except Exception as exc:
+            failed.append((target, str(exc)))
+            print(f"  FAILED   {target.path}  ({exc})")
+
+    print(f"\nDeleted {len(succeeded)}/{len(targets)} folder(s).")
+    if failed:
+        print(f"{len(failed)} deletion(s) failed — see above for details.")
+
+    if json_out:
+        payload = {
+            "deleted_count": len(succeeded),
+            "failed_count": len(failed),
+            "total_size_bytes": sum(t.size for t in succeeded),
+            "deleted": serialize_targets(succeeded),
+            "failed": [{"path": str(t.path), "error": err} for t, err in failed],
+        }
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        json_out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(f"JSON report written to {json_out}")
+
+    return 0 if not failed else 1
 
 
 def write_json_report(targets: list[ScanTarget], output_path: Path) -> None:
