@@ -8,6 +8,7 @@ from pathlib import Path
 def _on_rm_error(_func, path: str, exc_info) -> None:
     del exc_info
     os.chmod(path, stat.S_IWRITE)
+    _func(path)
 
 
 def delete_tree(path: Path) -> None:

@@ -54,6 +54,23 @@ class SettingsTests(unittest.TestCase):
         settings = load_settings(self.settings_file)
         self.assertEqual(settings, AppSettings(last_path="", theme="dark", ignored_paths=()))
 
+    def test_load_settings_filters_blank_and_non_string_ignored_paths(self) -> None:
+        self.settings_file.write_text(
+            json.dumps(
+                {
+                    "last_path": "D:/demo",
+                    "theme": "dark",
+                    "ignored_paths": ["", "  ", "D:/keep", 123, None, "D:/cache"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        settings = load_settings(self.settings_file)
+        self.assertEqual(
+            settings,
+            AppSettings(last_path="D:/demo", theme="dark", ignored_paths=("D:/keep", "D:/cache")),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -167,10 +167,15 @@ Covered areas:
 - target detection
 - virtualenv validation
 - nested-folder skip behavior
+- ignored path handling
+- scan cancellation behavior
 - safe delete behavior
+- read-only file cleanup behavior
 - settings persistence
 - CLI scan and JSON export behavior
 - text report export behavior
+
+The test suite is intentionally strongest around non-UI logic. Tkinter widget behavior is still validated manually rather than through UI automation tests.
 
 ## Project Layout
 

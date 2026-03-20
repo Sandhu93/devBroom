@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import sys
 import unittest
 import uuid
@@ -54,6 +55,17 @@ class CleanupTests(RepoTempDirTestCase):
 
         with self.assertRaises(OSError):
             delete_tree(link)
+
+    def test_delete_tree_removes_read_only_files(self) -> None:
+        path = self.workdir / "readonly"
+        path.mkdir()
+        file_path = path / "file.txt"
+        file_path.write_text("data", encoding="ascii")
+        os.chmod(file_path, stat.S_IREAD)
+
+        delete_tree(path)
+
+        self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":

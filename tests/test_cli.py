@@ -8,14 +8,16 @@ import unittest
 import uuid
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from devbroom.app import run_cli
+from devbroom.app import build_parser, run_cli
 from devbroom.cli import format_targets_table, write_json_report, write_text_report
 from devbroom.models import NODE_MODULES_NAME, ScanTarget, VENV_KIND
+from devbroom.settings import AppSettings
 
 
 TEST_ROOT = Path(__file__).resolve().parent / ".tmp"
@@ -79,6 +81,54 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertIn("Not a directory:", buffer.getvalue())
+
+    def test_run_cli_uses_saved_ignored_paths_when_enabled(self) -> None:
+        ignored_root = self.workdir / "ignored"
+        ignored_target = ignored_root / NODE_MODULES_NAME
+        ignored_target.mkdir(parents=True)
+        (ignored_target / "package.json").write_text("{}", encoding="ascii")
+
+        kept_target = self.workdir / "kept" / NODE_MODULES_NAME
+        kept_target.mkdir(parents=True)
+        (kept_target / "package.json").write_text("{}", encoding="ascii")
+
+        settings = AppSettings(last_path=str(self.workdir), theme="dark", ignored_paths=(str(ignored_root),))
+        buffer = io.StringIO()
+        with patch("devbroom.app.load_settings", return_value=settings):
+            with redirect_stdout(buffer):
+                exit_code = run_cli(self.workdir, None, use_settings_ignores=True)
+
+        output = buffer.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn(str(kept_target), output)
+        self.assertNotIn(str(ignored_target), output)
+        self.assertIn("Using 1 ignored path(s).", output)
+
+    def test_run_cli_can_ignore_saved_ignored_paths(self) -> None:
+        ignored_root = self.workdir / "ignored"
+        ignored_target = ignored_root / NODE_MODULES_NAME
+        ignored_target.mkdir(parents=True)
+        (ignored_target / "package.json").write_text("{}", encoding="ascii")
+
+        settings = AppSettings(last_path=str(self.workdir), theme="dark", ignored_paths=(str(ignored_root),))
+        buffer = io.StringIO()
+        with patch("devbroom.app.load_settings", return_value=settings):
+            with redirect_stdout(buffer):
+                exit_code = run_cli(self.workdir, None, use_settings_ignores=False)
+
+        output = buffer.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn(str(ignored_target), output)
+        self.assertNotIn("Using 1 ignored path(s).", output)
+
+    def test_build_parser_parses_cli_arguments(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["--cli", "--path", "demo", "--json-out", "out.json", "--no-settings-ignores"])
+
+        self.assertTrue(args.cli)
+        self.assertEqual(args.path, Path("demo"))
+        self.assertEqual(args.json_out, Path("out.json"))
+        self.assertTrue(args.no_settings_ignores)
 
 
 if __name__ == "__main__":
