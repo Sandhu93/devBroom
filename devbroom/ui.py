@@ -10,6 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 from .cleanup import delete_tree
 from .models import NODE_MODULES_NAME, VENV_KIND, ScanTarget
 from .scanner import human_size, iter_scan_targets
+from .settings import AppSettings, save_settings
 
 
 APP_TITLE = "DevBroom"
@@ -116,11 +117,12 @@ class DevBroomApp(tk.Tk):
     COL_SIZE = "Size"
     COL_PATH = "Path"
 
-    def __init__(self) -> None:
+    def __init__(self, settings: AppSettings | None = None) -> None:
         super().__init__()
         self.title(APP_TITLE)
         self.geometry(WINDOW_SIZE)
         self.minsize(*WINDOW_MIN_SIZE)
+        settings = settings or AppSettings()
 
         self._items: dict[str, ScanTarget] = {}
         self._row_tags: dict[str, str] = {}
@@ -129,15 +131,19 @@ class DevBroomApp(tk.Tk):
         self._scanning = False
         self._sort_state = {"key": "size", "descending": True}
 
-        self._path_var = tk.StringVar(value=str(Path.home()))
+        default_path = settings.last_path.strip() or str(Path.home())
+        theme_name = settings.theme if settings.theme in {"light", "dark"} else "dark"
+
+        self._path_var = tk.StringVar(value=default_path)
         self._status_var = tk.StringVar(value="Choose a directory and start a scan.")
         self._summary_var = tk.StringVar(value="No folders selected")
         self._found_var = tk.StringVar(value="0 folders found")
+        self._visible_total_var = tk.StringVar(value="0 B visible")
         self._show_node = tk.BooleanVar(value=True)
         self._show_venv = tk.BooleanVar(value=True)
-        self._theme_name = tk.StringVar(value="dark")
+        self._theme_name = tk.StringVar(value=theme_name)
         self._ui_font, self._mono_font = preferred_ui_fonts()
-        self._theme = DARK_THEME
+        self._theme = LIGHT_THEME if theme_name == "light" else DARK_THEME
 
         self._build_ui()
         self._apply_theme()
@@ -201,6 +207,14 @@ class DevBroomApp(tk.Tk):
             anchor="e",
         )
         self._found_label.pack(side="right")
+
+        self._visible_total_label = tk.Label(
+            self._summary_top,
+            textvariable=self._visible_total_var,
+            font=(self._ui_font, 10),
+            anchor="e",
+        )
+        self._visible_total_label.pack(side="right", padx=(0, 18))
 
         self._status_label = tk.Label(
             self._summary_card,
@@ -366,6 +380,7 @@ class DevBroomApp(tk.Tk):
         self._theme_name.set("light" if self._theme.name == "dark" else "dark")
         self._theme = LIGHT_THEME if self._theme_name.get() == "light" else DARK_THEME
         self._apply_theme()
+        self._save_preferences()
 
     def _apply_theme(self) -> None:
         theme = self._theme
@@ -399,6 +414,7 @@ class DevBroomApp(tk.Tk):
         self._subtitle_label.config(bg=theme.bg, fg=theme.text_muted)
         self._summary_label.config(bg=theme.surface, fg=theme.text)
         self._found_label.config(bg=theme.surface, fg=theme.text_muted)
+        self._visible_total_label.config(bg=theme.surface, fg=theme.text_muted)
         self._status_label.config(bg=theme.surface, fg=theme.text_muted)
         self._scan_label.config(bg=theme.surface, fg=theme.text_muted)
         self._results_title.config(bg=theme.surface, fg=theme.text)
@@ -533,6 +549,7 @@ class DevBroomApp(tk.Tk):
         directory = filedialog.askdirectory(initialdir=self._path_var.get())
         if directory:
             self._path_var.set(directory)
+            self._save_preferences()
 
     def _start_scan(self) -> None:
         root = Path(self._path_var.get().strip()).expanduser()
@@ -541,6 +558,8 @@ class DevBroomApp(tk.Tk):
             return
         if self._scanning:
             return
+
+        self._save_preferences()
 
         self._clear_results()
         self._stop_event.clear()
@@ -560,6 +579,7 @@ class DevBroomApp(tk.Tk):
         self._row_tags.clear()
         self._checked.clear()
         self._found_var.set("0 folders found")
+        self._visible_total_var.set("0 B visible")
         self._update_summary()
 
     def _scan_thread(self, root: Path) -> None:
@@ -607,6 +627,7 @@ class DevBroomApp(tk.Tk):
         self._items[iid] = target
         self._row_tags[iid] = tag
         self._apply_filter_to_item(iid)
+        self._update_visible_total()
 
     def _apply_filter_to_item(self, iid: str) -> None:
         target = self._items[iid]
@@ -690,6 +711,8 @@ class DevBroomApp(tk.Tk):
             self._tree.move(iid, "", index)
 
     def _update_summary(self) -> None:
+        self._update_visible_total()
+
         if not self._checked:
             self._summary_var.set("No folders selected")
             self._del_btn.config(state="disabled")
@@ -758,4 +781,17 @@ class DevBroomApp(tk.Tk):
 
     def _on_close(self) -> None:
         self._stop_event.set()
+        self._save_preferences()
         self.destroy()
+
+    def _save_preferences(self) -> None:
+        settings = AppSettings(last_path=self._path_var.get().strip(), theme=self._theme.name)
+        try:
+            save_settings(settings)
+        except OSError:
+            pass
+
+    def _update_visible_total(self) -> None:
+        visible_ids = self._tree.get_children()
+        visible_total = sum(self._items[iid].size for iid in visible_ids if iid in self._items)
+        self._visible_total_var.set(f"{human_size(visible_total)} visible")
