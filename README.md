@@ -221,6 +221,8 @@ Run the full suite:
 python -m unittest discover -s tests
 ```
 
+GitHub Actions also runs the test suite automatically on pushes to `main` and on pull requests targeting `main`.
+
 You can also run each file directly:
 
 ```bash
