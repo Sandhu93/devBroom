@@ -6,3 +6,8 @@ tests/.tmp/
 .devbroom.json
 
 LOCAL_DEVBROOM_DEEP_DIVE.md
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
