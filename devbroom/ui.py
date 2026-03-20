@@ -638,6 +638,8 @@ class DevBroomApp(tk.Tk):
         status = "Scan stopped." if self._stop_event.is_set() else "Scan complete."
         self._status_var.set(f"{status} Found {count} folder(s).")
         self._update_summary()
+        if count > 0 and not self._stop_event.is_set():
+            self._sort("size")
 
     def _stop_scan(self) -> None:
         self._stop_event.set()
@@ -752,25 +754,108 @@ class DevBroomApp(tk.Tk):
         self._del_btn.config(state="normal")
         self._refresh_all_buttons()
 
+    def _confirm_deletion_panel(self, targets: list[ScanTarget], total_size: int) -> bool:
+        dialog = tk.Toplevel(self)
+        dialog.title("Confirm Deletion")
+        dialog.geometry("800x480")
+        dialog.configure(bg=self._theme.surface)
+        dialog.resizable(True, True)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        result = tk.BooleanVar(value=False)
+
+        header = tk.Frame(dialog, bg=self._theme.surface, padx=20, pady=16)
+        header.pack(fill="x")
+
+        tk.Label(
+            header,
+            text=f"Delete {len(targets)} folder(s) — {human_size(total_size)} will be freed",
+            font=(self._ui_font, 12, "bold"),
+            bg=self._theme.surface,
+            fg=self._theme.danger,
+            anchor="w",
+        ).pack(fill="x")
+
+        tk.Label(
+            header,
+            text="This cannot be undone. Deleted folders are not moved to Trash.",
+            font=(self._ui_font, 9),
+            bg=self._theme.surface,
+            fg=self._theme.text_muted,
+            anchor="w",
+        ).pack(fill="x", pady=(4, 0))
+
+        list_frame = tk.Frame(dialog, bg=self._theme.surface, padx=20, pady=0)
+        list_frame.pack(fill="both", expand=True)
+
+        columns = ("Type", "Size", "Path")
+        tree = ttk.Treeview(
+            list_frame,
+            columns=columns,
+            show="headings",
+            style="Dev.Treeview",
+        )
+        tree.heading("Type", text="Type")
+        tree.heading("Size", text="Size")
+        tree.heading("Path", text="Path")
+        tree.column("Type", width=130, stretch=False, anchor="center")
+        tree.column("Size", width=110, stretch=False, anchor="e")
+        tree.column("Path", width=500, stretch=True)
+        tree.tag_configure("node", background=self._theme.node_bg, foreground=self._theme.node_fg)
+        tree.tag_configure("venv", background=self._theme.venv_bg, foreground=self._theme.venv_fg)
+
+        for target in sorted(targets, key=lambda t: t.size, reverse=True):
+            label = NODE_MODULES_NAME if target.kind == NODE_MODULES_NAME else "virtualenv"
+            tag = "node" if target.kind == NODE_MODULES_NAME else "venv"
+            tree.insert("", "end", values=(label, human_size(target.size), str(target.path)), tags=(tag,))
+
+        vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
+        hsb = ttk.Scrollbar(list_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        list_frame.rowconfigure(0, weight=1)
+        list_frame.columnconfigure(0, weight=1)
+
+        btn_frame = tk.Frame(dialog, bg=self._theme.surface, padx=20, pady=16)
+        btn_frame.pack(fill="x")
+
+        def on_cancel() -> None:
+            result.set(False)
+            dialog.destroy()
+
+        def on_confirm() -> None:
+            result.set(True)
+            dialog.destroy()
+
+        dialog.protocol("WM_DELETE_WINDOW", on_cancel)
+
+        cancel_btn = self._make_button(btn_frame, "Cancel", on_cancel)
+        cancel_btn.pack(side="right", padx=(8, 0))
+        self._refresh_button(cancel_btn, hovered=False)
+
+        confirm_btn = self._make_button(
+            btn_frame,
+            f"Delete {len(targets)} folder(s)",
+            on_confirm,
+            danger=True,
+        )
+        confirm_btn.pack(side="right")
+        self._refresh_button(confirm_btn, hovered=False)
+
+        dialog.wait_window()
+        return result.get()
+
     def _delete_selected(self) -> None:
         selected_ids = [iid for iid in self._checked if iid in self._items]
         if not selected_ids:
             return
 
-        total_size = sum(self._items[iid].size for iid in selected_ids)
-        count = len(selected_ids)
-        confirmed = messagebox.askyesno(
-            "Confirm deletion",
-            (
-                f"You are about to permanently delete {count} folder(s) "
-                f"({human_size(total_size)}).\n\n"
-                f"{NODE_MODULES_NAME}: restore with npm install / pnpm install / yarn install\n"
-                "venv/.venv: recreate and reinstall requirements as needed\n\n"
-                "This cannot be undone. Proceed?"
-            ),
-            icon="warning",
-        )
-        if not confirmed:
+        targets = [self._items[iid] for iid in selected_ids]
+        total_size = sum(t.size for t in targets)
+        if not self._confirm_deletion_panel(targets, total_size):
             return
 
         deleted = 0
