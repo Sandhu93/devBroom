@@ -15,7 +15,8 @@ build/
 # Python cache
 __pycache__/
 *.py[cod]
-.coverage*
+.coverage
+.coverage.*
 
 # Test temp dirs
 tests/.tmp/

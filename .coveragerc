@@ -1,0 +1,9 @@
+[run]
+branch = True
+source = devbroom
+omit =
+    devbroom/ui.py
+
+[report]
+show_missing = True
+skip_covered = True
