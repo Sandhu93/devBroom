@@ -182,18 +182,18 @@ Include targets that are not inside a git repository (e.g. when scanning an enti
 devbroom --cli --path /path/to/scan --include-non-project
 ```
 
-Only show targets that have not been modified in the last N days:
+Only show targets with no filesystem changes in the last N days:
 
 ```bash
 devbroom --cli --path /path/to/projects --older-than 90
 ```
 
-This is useful for skipping active projects. A `node_modules` or virtualenv that has not had packages installed or removed in 90 days is a much safer deletion candidate than one that was touched yesterday.
+DevBroom reports the time since the newest file or directory modification anywhere inside each target. This helps find unchanged folders, but it does not track reads or prove that a folder is unused. Review each path before deleting it.
 
 CLI output includes:
 
 - matching folders sorted by size (largest first)
-- estimated sizes and age of each target
+- estimated sizes and time since each target last changed
 - live progress indicator while scanning
 - total reclaimable size
 - optional JSON export
@@ -203,7 +203,7 @@ CLI output includes:
 - Scan a chosen directory recursively
 - Detect `node_modules`
 - Detect Python virtual environments such as `venv`, `.venv`, and `virtualenv`
-- Show estimated folder sizes and age of each target before deletion
+- Show estimated folder sizes and time since each target last changed
 - Filter results by age with `--older-than N` (CLI) or the age spinbox (GUI)
 - Live scan progress indicator in CLI mode
 - Non-blocking deletion with live per-item progress in the GUI
@@ -256,11 +256,13 @@ From the CLI:
 
 ## Safety Notes
 
-- Deletion is permanent. Items are not moved to Trash or Recycle Bin.
+- Deletion is permanent. The review dialog and CLI confirmation warn that items are not moved to Trash or Recycle Bin.
+- In the CLI, confirm permanent deletion by typing `delete`; `--yes` skips this prompt.
 - Symlinked directories are skipped during scanning.
 - Symlink targets are not deleted.
 - Read-only files are handled during deletion where possible.
 - Permission errors and locked files are reported without aborting the entire operation.
+- Incomplete scans warn that candidates may be missing and size estimates may be undercounts. Targets with unreadable contents show an unknown age and remain visible when an age filter is active.
 
 ## Project Layout
 
@@ -276,16 +278,20 @@ From the CLI:
 - `tests/test_cleanup.py`: cleanup tests
 - `tests/test_settings.py`: settings tests
 - `tests/test_cli.py`: CLI tests
+- `tests/test_ui_smoke.py`: GUI startup smoke test
 
 ## Tests
 
-The project includes a strong non-UI unit test suite.
+The project includes unit tests for core logic plus a Tk window startup smoke test.
 
 Run the full suite:
 
 ```bash
 python -m unittest discover -s tests
 ```
+
+See [TESTING.md](./TESTING.md) for the coverage gate, cross-platform CI matrix,
+package verification, GUI smoke test, and remaining manual checks.
 
 GitHub Actions also runs the test suite automatically on pushes to `main` and on pull requests targeting `main`.
 
@@ -311,12 +317,13 @@ Covered areas:
 - CLI scan and JSON export behavior
 - text report export behavior
 
-The suite is intentionally strongest around non-UI logic. Tkinter widget behavior is still validated manually rather than through UI automation tests.
+The automated suite is strongest around non-UI logic. Tk startup is smoke-tested, while widget interactions and visual layout still need manual review.
 
 ## Known Limitations
 
 - Scans can be slow on very large directories because folder sizes are calculated recursively.
 - Locked files on Windows may still prevent complete deletion.
+- Permission-restricted scans may omit targets. DevBroom reports filesystem errors and marks affected sizes as lower bounds, but a scan still cannot guarantee a complete inventory.
 - Tkinter styling can vary across platforms and desktop environments.
 - GUI export currently exports visible rows only, which is usually the right behavior after filtering.
 

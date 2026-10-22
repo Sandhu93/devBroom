@@ -4,6 +4,8 @@ import os
 import stat
 from pathlib import Path
 
+from .filesystem import is_link_or_junction
+
 
 def _on_rm_error(_func, path: str, exc_info) -> None:
     del exc_info
@@ -14,8 +16,8 @@ def _on_rm_error(_func, path: str, exc_info) -> None:
 def delete_tree(path: Path) -> None:
     if not path.exists():
         return
-    if path.is_symlink():
-        raise OSError(f"Refusing to delete symlink target: {path}")
+    if is_link_or_junction(path):
+        raise OSError(f"Refusing to delete a symlink, junction, or reparse point: {path}")
 
     import shutil
 

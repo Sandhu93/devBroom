@@ -7,6 +7,7 @@ import sys
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -55,6 +56,21 @@ class CleanupTests(RepoTempDirTestCase):
 
         with self.assertRaises(OSError):
             delete_tree(link)
+
+    def test_delete_tree_refuses_junction_or_reparse_point(self) -> None:
+        target = self.workdir / "target"
+        target.mkdir()
+        (target / "sentinel.txt").write_text("safe", encoding="ascii")
+        path = self.workdir / "candidate"
+        path.mkdir()
+        (path / "data.txt").write_text("candidate", encoding="ascii")
+
+        with patch("devbroom.cleanup.is_link_or_junction", return_value=True):
+            with self.assertRaisesRegex(OSError, "junction"):
+                delete_tree(path)
+
+        self.assertTrue((target / "sentinel.txt").exists())
+        self.assertTrue((path / "data.txt").exists())
 
     def test_delete_tree_removes_read_only_files(self) -> None:
         path = self.workdir / "readonly"

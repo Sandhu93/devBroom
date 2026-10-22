@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from .cleanup import delete_tree
-from .models import ScanTarget
+from .models import ScanDiagnostics, ScanTarget
 from .scanner import human_age, human_size, iter_scan_targets
 
 
@@ -16,9 +16,11 @@ def scan_targets(
     require_git_repo: bool = True,
     older_than: int | None = None,
     show_progress: bool = False,
+    diagnostics: ScanDiagnostics | None = None,
 ) -> list[ScanTarget]:
     stop_event = threading.Event()
     stats: dict = {"visited": 0}
+    diagnostics = diagnostics if diagnostics is not None else ScanDiagnostics()
 
     if show_progress:
         _done = threading.Event()
@@ -46,6 +48,7 @@ def scan_targets(
             require_git_repo=require_git_repo,
             older_than=older_than,
             stats=stats,
+            diagnostics=diagnostics,
         )
     )
 
@@ -58,27 +61,35 @@ def scan_targets(
     return results
 
 
-def serialize_targets(targets: list[ScanTarget]) -> list[dict[str, str | int | float]]:
+def serialize_targets(targets: list[ScanTarget]) -> list[dict[str, str | int | float | bool | None]]:
     return [
         {
             "path": str(target.path),
             "kind": target.kind,
             "size_bytes": target.size,
             "size_human": human_size(target.size),
-            "age_days": round(target.age_days, 1),
+            "size_complete": target.size_complete,
+            "age_days": round(target.age_days, 1) if target.age_days is not None else None,
         }
         for target in targets
     ]
 
 
-def format_targets_table(targets: list[ScanTarget]) -> str:
+def format_targets_table(
+    targets: list[ScanTarget], diagnostics: ScanDiagnostics | None = None
+) -> str:
     if not targets:
         return "No cleanup targets found."
 
     rows = [
-        ("TYPE", "SIZE", "AGE", "PATH"),
+        ("TYPE", "SIZE", "LAST CHANGE", "PATH"),
         *[
-            (target.kind, human_size(target.size), human_age(target.age_days), str(target.path))
+            (
+                target.kind,
+                ("" if target.size_complete else ">= ") + human_size(target.size),
+                human_age(target.age_days),
+                str(target.path),
+            )
             for target in targets
         ],
     ]
@@ -95,22 +106,52 @@ def format_targets_table(targets: list[ScanTarget]) -> str:
 
     total_size = sum(target.size for target in targets)
     lines.append("")
-    lines.append(f"Found {len(targets)} folders totaling {human_size(total_size)}.")
+    total_label = (
+        "at least "
+        if any(not target.size_complete for target in targets)
+        or (diagnostics is not None and diagnostics.incomplete)
+        else ""
+    )
+    lines.append(f"Found {len(targets)} folders totaling {total_label}{human_size(total_size)}.")
     return "\n".join(lines)
 
 
-def write_text_report(targets: list[ScanTarget], output_path: Path) -> None:
+def write_text_report(
+    targets: list[ScanTarget],
+    output_path: Path,
+    diagnostics: ScanDiagnostics | None = None,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(format_targets_table(targets) + "\n", encoding="utf-8")
+    report = format_targets_table(targets, diagnostics=diagnostics)
+    if diagnostics is not None and diagnostics.incomplete:
+        warning = (
+            f"WARNING: Scan incomplete; encountered {diagnostics.error_count} filesystem error(s). "
+            "Results and estimates may be incomplete."
+        )
+        error_lines = list(diagnostics.errors)
+        if diagnostics.error_count > len(error_lines):
+            error_lines.append(f"... and {diagnostics.error_count - len(error_lines)} more error(s).")
+        report = warning + "\n" + "\n".join(error_lines) + "\n\n" + report
+    output_path.write_text(report + "\n", encoding="utf-8")
 
 
-def delete_targets(targets: list[ScanTarget], json_out: Path | None = None, yes: bool = False) -> int:
+def delete_targets(
+    targets: list[ScanTarget],
+    json_out: Path | None = None,
+    yes: bool = False,
+    diagnostics: ScanDiagnostics | None = None,
+) -> int:
     total_size = human_size(sum(t.size for t in targets))
-    print(f"\nAbout to delete {len(targets)} folder(s) totaling {total_size}:")
-    print(format_targets_table(targets))
+    total_label = "at least " if any(not target.size_complete for target in targets) else ""
+    print(f"\nAbout to delete {len(targets)} folder(s) totaling {total_label}{total_size}:")
+    print(format_targets_table(targets, diagnostics=diagnostics))
+    print("\nWARNING: This permanently deletes these folders. They cannot be restored from Trash or Recycle Bin.")
     if not yes:
-        answer = input("\nProceed? [y/N] ").strip().lower()
-        if answer not in ("y", "yes"):
+        try:
+            answer = input("Type 'delete' to permanently delete these folders, or press Enter to cancel: ").strip().lower()
+        except EOFError:
+            answer = ""
+        if answer != "delete":
             print("Aborted.")
             return 0
 
@@ -134,6 +175,10 @@ def delete_targets(targets: list[ScanTarget], json_out: Path | None = None, yes:
             "deleted_count": len(succeeded),
             "failed_count": len(failed),
             "total_size_bytes": sum(t.size for t in succeeded),
+            "total_size_complete": not any(not target.size_complete for target in succeeded),
+            "scan_complete": not diagnostics.incomplete if diagnostics is not None else True,
+            "scan_errors": diagnostics.errors if diagnostics is not None else [],
+            "scan_error_count": diagnostics.error_count if diagnostics is not None else 0,
             "deleted": serialize_targets(succeeded),
             "failed": [{"path": str(t.path), "error": err} for t, err in failed],
         }
@@ -144,11 +189,20 @@ def delete_targets(targets: list[ScanTarget], json_out: Path | None = None, yes:
     return 0 if not failed else 1
 
 
-def write_json_report(targets: list[ScanTarget], output_path: Path) -> None:
+def write_json_report(
+    targets: list[ScanTarget],
+    output_path: Path,
+    diagnostics: ScanDiagnostics | None = None,
+) -> None:
     payload = {
         "count": len(targets),
         "total_size_bytes": sum(target.size for target in targets),
+        "total_size_complete": not any(not target.size_complete for target in targets)
+        and not (diagnostics is not None and diagnostics.incomplete),
         "targets": serialize_targets(targets),
+        "scan_complete": not diagnostics.incomplete if diagnostics is not None else True,
+        "scan_errors": diagnostics.errors if diagnostics is not None else [],
+        "scan_error_count": diagnostics.error_count if diagnostics is not None else 0,
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

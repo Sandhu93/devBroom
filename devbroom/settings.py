@@ -28,11 +28,17 @@ def load_settings(path: Path | None = None) -> AppSettings:
     target = path or settings_file_path()
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return AppSettings()
+
+    # Valid JSON can still have the wrong shape (for example `null` or `[]`).
+    # Treat that the same as a corrupt settings file rather than failing at
+    # startup when accessing object keys below.
+    if not isinstance(raw, dict):
         return AppSettings()
 
     theme = raw.get("theme", "dark")
-    if theme not in {"light", "dark"}:
+    if not isinstance(theme, str) or theme not in {"light", "dark"}:
         theme = "dark"
 
     last_path = raw.get("last_path", "")

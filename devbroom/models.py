@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -22,4 +22,23 @@ class ScanTarget:
     path: Path
     kind: str
     size: int
-    age_days: float = 0.0
+    age_days: float | None = 0.0
+    size_complete: bool = True
+
+
+@dataclass
+class ScanDiagnostics:
+    """Errors encountered while walking a scan or measuring target folders."""
+
+    error_count: int = 0
+    errors: list[str] = field(default_factory=list)
+    sample_limit: int = 5
+
+    @property
+    def incomplete(self) -> bool:
+        return self.error_count > 0
+
+    def record(self, path: Path | str, error: OSError) -> None:
+        self.error_count += 1
+        if len(self.errors) < self.sample_limit:
+            self.errors.append(f"{path}: {error}")

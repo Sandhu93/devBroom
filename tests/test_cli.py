@@ -18,8 +18,8 @@ import re
 
 from devbroom import __version__
 from devbroom.app import build_parser, main, run_cli
-from devbroom.cli import format_targets_table, write_json_report, write_text_report
-from devbroom.models import NODE_MODULES_NAME, ScanTarget, VENV_KIND
+from devbroom.cli import delete_targets, format_targets_table, write_json_report, write_text_report
+from devbroom.models import NODE_MODULES_NAME, ScanDiagnostics, ScanTarget, VENV_KIND
 from devbroom.settings import AppSettings
 
 
@@ -38,6 +38,21 @@ class CliTests(unittest.TestCase):
     def test_format_targets_table_handles_empty_results(self) -> None:
         self.assertEqual(format_targets_table([]), "No cleanup targets found.")
 
+    def test_format_targets_table_marks_partial_size_and_unknown_age(self) -> None:
+        target = ScanTarget(
+            path=Path("/tmp/project/node_modules"),
+            kind=NODE_MODULES_NAME,
+            size=1024,
+            age_days=None,
+            size_complete=False,
+        )
+
+        report = format_targets_table([target])
+
+        self.assertIn(">= 1.0 KB", report)
+        self.assertIn("Unknown", report)
+        self.assertIn("totaling at least 1.0 KB", report)
+
     def test_write_json_report_writes_expected_payload(self) -> None:
         targets = [
             ScanTarget(path=Path("/tmp/project/node_modules"), kind=NODE_MODULES_NAME, size=1024),
@@ -52,6 +67,26 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["total_size_bytes"], 3072)
         self.assertEqual(len(payload["targets"]), 2)
 
+    def test_write_json_report_includes_scan_diagnostics_and_partial_size(self) -> None:
+        target = ScanTarget(
+            path=Path("/tmp/project/node_modules"),
+            kind=NODE_MODULES_NAME,
+            size=1024,
+            age_days=None,
+            size_complete=False,
+        )
+        diagnostics = ScanDiagnostics()
+        diagnostics.record("/tmp/project/node_modules/locked.bin", PermissionError("permission denied"))
+        output = self.workdir / "partial-report.json"
+
+        write_json_report([target], output, diagnostics=diagnostics)
+
+        payload = json.loads(output.read_text(encoding="utf-8"))
+        self.assertFalse(payload["scan_complete"])
+        self.assertEqual(payload["scan_error_count"], 1)
+        self.assertFalse(payload["total_size_complete"])
+        self.assertIsNone(payload["targets"][0]["age_days"])
+
     def test_write_text_report_writes_table_output(self) -> None:
         targets = [ScanTarget(path=Path("/tmp/project/node_modules"), kind=NODE_MODULES_NAME, size=1024)]
         output = self.workdir / "report.txt"
@@ -62,6 +97,17 @@ class CliTests(unittest.TestCase):
         self.assertIn("TYPE", text)
         self.assertIn("node_modules", text)
         self.assertIn("Found 1 folders totaling 1.0 KB.", text)
+
+    def test_write_text_report_warns_about_incomplete_scan(self) -> None:
+        diagnostics = ScanDiagnostics()
+        diagnostics.record("/tmp/project/locked", PermissionError("permission denied"))
+        output = self.workdir / "partial-report.txt"
+
+        write_text_report([], output, diagnostics=diagnostics)
+
+        text = output.read_text(encoding="utf-8")
+        self.assertIn("WARNING: Scan incomplete", text)
+        self.assertIn("/tmp/project/locked", text)
 
     def test_run_cli_scans_and_prints_results(self) -> None:
         node_modules = self.workdir / "app" / "node_modules"
@@ -76,6 +122,28 @@ class CliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("node_modules", output)
         self.assertIn("Total reclaimable size:", output)
+
+    def test_run_cli_warns_when_scan_is_incomplete(self) -> None:
+        target = ScanTarget(
+            path=self.workdir / "node_modules",
+            kind=NODE_MODULES_NAME,
+            size=10,
+            age_days=0.0,
+        )
+
+        def incomplete_scan(_root, **kwargs):
+            kwargs["diagnostics"].record(self.workdir / "locked", PermissionError("permission denied"))
+            return [target]
+
+        buffer = io.StringIO()
+        with patch("devbroom.app.scan_targets", side_effect=incomplete_scan), redirect_stdout(buffer):
+            exit_code = run_cli(self.workdir, None, use_settings_ignores=False, older_than=30)
+
+        output = buffer.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Scan incomplete", output)
+        self.assertIn("estimates may be incomplete", output)
+        self.assertIn("at least", output)
 
     def test_run_cli_returns_error_for_invalid_path(self) -> None:
         buffer = io.StringIO()
@@ -220,6 +288,7 @@ class CliTests(unittest.TestCase):
         output = buffer.getvalue()
         self.assertEqual(exit_code, 0)
         self.assertFalse(node_modules.exists(), "node_modules should have been deleted")
+        self.assertIn("permanently deletes", output)
         self.assertIn("Deleted", output)
 
     def test_delete_and_dry_run_are_mutually_exclusive(self) -> None:
@@ -247,6 +316,21 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["deleted_count"], 1)
         self.assertEqual(payload["failed_count"], 0)
         self.assertEqual(len(payload["deleted"]), 1)
+
+    def test_delete_reports_failure_and_returns_nonzero(self) -> None:
+        target = ScanTarget(path=self.workdir / "app" / "node_modules", kind=NODE_MODULES_NAME, size=10)
+        report_path = self.workdir / "delete-report.json"
+        buffer = io.StringIO()
+        with patch("devbroom.cli.delete_tree", side_effect=PermissionError("locked")):
+            with redirect_stdout(buffer):
+                exit_code = delete_targets([target], json_out=report_path, yes=True)
+
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(payload["deleted_count"], 0)
+        self.assertEqual(payload["failed_count"], 1)
+        self.assertEqual(payload["failed"][0]["error"], "locked")
+        self.assertIn("FAILED", buffer.getvalue())
 
     # --- main() entry point ---
 
@@ -337,7 +421,7 @@ class CliTests(unittest.TestCase):
     def test_format_targets_table_includes_age_column(self) -> None:
         targets = [ScanTarget(path=Path("/tmp/project/node_modules"), kind=NODE_MODULES_NAME, size=1024, age_days=45.0)]
         output = format_targets_table(targets)
-        self.assertIn("AGE", output)
+        self.assertIn("LAST CHANGE", output)
         self.assertIn("1mo", output)
 
     def test_run_cli_older_than_filters_fresh_targets(self) -> None:
@@ -385,6 +469,8 @@ class CliTests(unittest.TestCase):
 
         output = buffer.getvalue()
         self.assertEqual(exit_code, 0)
+        self.assertIn("permanently deletes", output)
+        self.assertIn("cannot be restored from Trash or Recycle Bin", output)
         self.assertIn("TYPE", output)
         self.assertIn(str(node_modules), output)
         # PATH header must appear at least twice: once in scan table, once in detail table
@@ -403,6 +489,33 @@ class CliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertTrue(node_modules.exists(), "node_modules should NOT be deleted when user says no")
         self.assertIn("Aborted", buffer.getvalue())
+
+    def test_delete_aborts_cleanly_when_stdin_is_closed(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            with patch("builtins.input", side_effect=EOFError):
+                exit_code = run_cli(self.workdir, None, use_settings_ignores=False, delete=True)
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(node_modules.exists())
+        self.assertIn("Aborted", buffer.getvalue())
+
+    def test_delete_requires_explicit_delete_word(self) -> None:
+        node_modules = self.workdir / "app" / "node_modules"
+        node_modules.mkdir(parents=True)
+        (node_modules / "package.json").write_text("{}", encoding="ascii")
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            with patch("builtins.input", return_value="delete"):
+                exit_code = run_cli(self.workdir, None, use_settings_ignores=False, delete=True)
+
+        self.assertEqual(exit_code, 0)
+        self.assertFalse(node_modules.exists())
 
 
 if __name__ == "__main__":

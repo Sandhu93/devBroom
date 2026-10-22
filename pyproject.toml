@@ -14,6 +14,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Operating System :: OS Independent",
   "Topic :: Utilities",
   "Topic :: System :: Filesystems",
@@ -24,6 +25,9 @@ classifiers = [
 Homepage = "https://github.com/Sandhu93/devBroom"
 Source = "https://github.com/Sandhu93/devBroom"
 "Bug Tracker" = "https://github.com/Sandhu93/devBroom/issues"
+
+[project.optional-dependencies]
+test = ["coverage>=7.6"]
 
 [tool.setuptools.dynamic]
 version = { attr = "devbroom.__version__" }

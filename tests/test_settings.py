@@ -46,6 +46,16 @@ class SettingsTests(unittest.TestCase):
         settings = load_settings(self.settings_file)
         self.assertEqual(settings, AppSettings())
 
+    def test_load_settings_falls_back_on_invalid_utf8(self) -> None:
+        self.settings_file.write_bytes(b"\xff\xfe\xfa")
+        self.assertEqual(load_settings(self.settings_file), AppSettings())
+
+    def test_load_settings_falls_back_when_json_root_is_not_an_object(self) -> None:
+        for value in ("null", "[]", '"settings"', "42"):
+            with self.subTest(value=value):
+                self.settings_file.write_text(value, encoding="utf-8")
+                self.assertEqual(load_settings(self.settings_file), AppSettings())
+
     def test_load_settings_normalizes_invalid_values(self) -> None:
         self.settings_file.write_text(
             json.dumps({"last_path": 123, "theme": "midnight", "ignored_paths": "bad"}),
@@ -53,6 +63,10 @@ class SettingsTests(unittest.TestCase):
         )
         settings = load_settings(self.settings_file)
         self.assertEqual(settings, AppSettings(last_path="", theme="dark", ignored_paths=()))
+
+    def test_load_settings_handles_unhashable_theme_value(self) -> None:
+        self.settings_file.write_text(json.dumps({"theme": []}), encoding="utf-8")
+        self.assertEqual(load_settings(self.settings_file), AppSettings())
 
     def test_load_settings_filters_blank_and_non_string_ignored_paths(self) -> None:
         self.settings_file.write_text(

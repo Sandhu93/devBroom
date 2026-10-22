@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .cli import format_targets_table, write_json_report, write_text_report
 from .cleanup import delete_tree
-from .models import NODE_MODULES_NAME, VENV_KIND, ScanTarget
+from .models import NODE_MODULES_NAME, VENV_KIND, ScanDiagnostics, ScanTarget
 from .scanner import human_age, human_size, iter_scan_targets
 from .settings import AppSettings, save_settings
 
@@ -116,7 +116,7 @@ class DevBroomApp(tk.Tk):
     COL_CHECK = "Pick"
     COL_TYPE = "Type"
     COL_SIZE = "Size"
-    COL_AGE = "Age"
+    COL_AGE = "Last change"
     COL_PATH = "Path"
 
     def __init__(self, settings: AppSettings | None = None) -> None:
@@ -130,6 +130,7 @@ class DevBroomApp(tk.Tk):
         self._row_tags: dict[str, str] = {}
         self._checked: set[str] = set()
         self._stop_event = threading.Event()
+        self._scan_diagnostics = ScanDiagnostics()
         self._scanning = False
         self._sort_state = {"key": "size", "descending": True}
         self._ignored_paths = list(dict.fromkeys(settings.ignored_paths))
@@ -279,7 +280,7 @@ class DevBroomApp(tk.Tk):
         self._age_sep = tk.Label(self._filters_wrap, text="|", font=(self._ui_font, 9))
         self._age_sep.pack(side="left", padx=(4, 6))
 
-        self._age_label = tk.Label(self._filters_wrap, text="Older than:", font=(self._ui_font, 9))
+        self._age_label = tk.Label(self._filters_wrap, text="Unchanged for:", font=(self._ui_font, 9))
         self._age_label.pack(side="left")
 
         self._age_spinbox = tk.Spinbox(
@@ -377,13 +378,13 @@ class DevBroomApp(tk.Tk):
         self._tree.heading(self.COL_CHECK, text="All", command=self._toggle_all)
         self._tree.heading(self.COL_TYPE, text="Type")
         self._tree.heading(self.COL_SIZE, text="Size", command=lambda: self._sort("size"))
-        self._tree.heading(self.COL_AGE, text="Age", command=lambda: self._sort("age"))
+        self._tree.heading(self.COL_AGE, text="Last change", command=lambda: self._sort("age"))
         self._tree.heading(self.COL_PATH, text="Path", command=lambda: self._sort("path"))
 
         self._tree.column(self.COL_CHECK, width=82, stretch=False, anchor="center")
         self._tree.column(self.COL_TYPE, width=140, stretch=False, anchor="center")
         self._tree.column(self.COL_SIZE, width=110, stretch=False, anchor="e")
-        self._tree.column(self.COL_AGE, width=72, stretch=False, anchor="e")
+        self._tree.column(self.COL_AGE, width=100, stretch=False, anchor="e")
         self._tree.column(self.COL_PATH, width=756, stretch=True)
 
         vsb = ttk.Scrollbar(self._table_frame, orient="vertical", command=self._tree.yview)
@@ -648,6 +649,7 @@ class DevBroomApp(tk.Tk):
 
     def _scan_thread(self, root: Path) -> None:
         count = 0
+        diagnostics = ScanDiagnostics()
 
         def on_found(target: ScanTarget) -> None:
             nonlocal count
@@ -657,15 +659,22 @@ class DevBroomApp(tk.Tk):
                 self.after(0, self._status_var.set, f"Found {count} folder(s) so far ...")
                 self.after(0, self._found_var.set, f"{count} folders found")
 
-        for target in iter_scan_targets(root, self._stop_event, ignored_paths=self._ignored_paths):
+        for target in iter_scan_targets(
+            root,
+            self._stop_event,
+            ignored_paths=self._ignored_paths,
+            diagnostics=diagnostics,
+        ):
             if self._stop_event.is_set():
                 break
             on_found(target)
 
         if self.winfo_exists():
-            self.after(0, self._scan_done, count)
+            self.after(0, self._scan_done, count, diagnostics)
 
-    def _scan_done(self, count: int) -> None:
+    def _scan_done(self, count: int, diagnostics: ScanDiagnostics | None = None) -> None:
+        diagnostics = diagnostics or ScanDiagnostics()
+        self._scan_diagnostics = diagnostics
         self._scanning = False
         self._progress.stop()
         self._btn_scan.config(state="normal")
@@ -673,10 +682,22 @@ class DevBroomApp(tk.Tk):
         self._refresh_all_buttons()
         self._found_var.set(f"{count} folders found")
         status = "Scan stopped." if self._stop_event.is_set() else "Scan complete."
+        if diagnostics.incomplete:
+            status = f"Scan incomplete ({diagnostics.error_count} filesystem error(s)); estimates may be low."
         self._status_var.set(f"{status} Found {count} folder(s).")
         self._update_summary()
         if count > 0 and not self._stop_event.is_set():
             self._sort("size")
+        if diagnostics.incomplete:
+            details = "\n".join(diagnostics.errors)
+            if diagnostics.error_count > len(diagnostics.errors):
+                details += f"\n... and {diagnostics.error_count - len(diagnostics.errors)} more error(s)."
+            messagebox.showwarning(
+                "Scan incomplete",
+                "Some directories or files could not be read. Results may omit folders, "
+                "sizes may be undercounted, and age filtering was skipped for affected targets."
+                + (f"\n\n{details}" if details else ""),
+            )
 
     def _stop_scan(self) -> None:
         self._stop_event.set()
@@ -687,7 +708,13 @@ class DevBroomApp(tk.Tk):
         iid = self._tree.insert(
             "",
             "end",
-            values=(UNCHECKED_MARK, label, human_size(target.size), human_age(target.age_days), str(target.path)),
+            values=(
+                UNCHECKED_MARK,
+                label,
+                (">= " if not target.size_complete else "") + human_size(target.size),
+                human_age(target.age_days),
+                str(target.path),
+            ),
             tags=(tag,),
         )
         self._items[iid] = target
@@ -704,7 +731,7 @@ class DevBroomApp(tk.Tk):
             min_age = int(self._older_than_var.get())
         except ValueError:
             min_age = 0
-        age_visible = min_age <= 0 or target.age_days >= min_age
+        age_visible = min_age <= 0 or target.age_days is None or target.age_days >= min_age
         show_item = kind_visible and age_visible
         if show_item:
             if iid not in self._tree.get_children():
@@ -778,7 +805,7 @@ class DevBroomApp(tk.Tk):
             if key == "size":
                 value = target.size
             elif key == "age":
-                value = target.age_days
+                value = float("-inf") if target.age_days is None else target.age_days
             else:
                 value = str(target.path).casefold()
             sortable.append((value, iid))
@@ -798,13 +825,15 @@ class DevBroomApp(tk.Tk):
 
         total_size = sum(self._items[iid].size for iid in self._checked if iid in self._items)
         count = len([iid for iid in self._checked if iid in self._items])
-        self._summary_var.set(f"{count} selected | {human_size(total_size)} can be reclaimed")
+        selected_targets = [self._items[iid] for iid in self._checked if iid in self._items]
+        total_prefix = "at least " if any(not target.size_complete for target in selected_targets) else ""
+        self._summary_var.set(f"{count} selected | {total_prefix}{human_size(total_size)} can be reclaimed")
         self._del_btn.config(state="normal")
         self._refresh_all_buttons()
 
     def _confirm_deletion_panel(self, targets: list[ScanTarget], total_size: int) -> bool:
         dialog = tk.Toplevel(self)
-        dialog.title("Confirm Deletion")
+        dialog.title("Confirm Permanent Deletion")
         dialog.geometry("800x480")
         dialog.configure(bg=self._theme.surface)
         dialog.resizable(True, True)
@@ -818,7 +847,11 @@ class DevBroomApp(tk.Tk):
 
         tk.Label(
             header,
-            text=f"Delete {len(targets)} folder(s) — {human_size(total_size)} will be freed",
+            text=(
+                f"Permanently delete {len(targets)} folder(s) — estimated "
+                f"{('at least ' if any(not target.size_complete for target in targets) else '')}"
+                f"{human_size(total_size)}"
+            ),
             font=(self._ui_font, 12, "bold"),
             bg=self._theme.surface,
             fg=self._theme.danger,
@@ -827,7 +860,7 @@ class DevBroomApp(tk.Tk):
 
         tk.Label(
             header,
-            text="This cannot be undone. Deleted folders are not moved to Trash.",
+            text="PERMANENT DELETION: These folders are not moved to Trash or Recycle Bin and cannot be restored.",
             font=(self._ui_font, 9),
             bg=self._theme.surface,
             fg=self._theme.text_muted,
@@ -856,7 +889,8 @@ class DevBroomApp(tk.Tk):
         for target in sorted(targets, key=lambda t: t.size, reverse=True):
             label = NODE_MODULES_NAME if target.kind == NODE_MODULES_NAME else "virtualenv"
             tag = "node" if target.kind == NODE_MODULES_NAME else "venv"
-            tree.insert("", "end", values=(label, human_size(target.size), str(target.path)), tags=(tag,))
+            size_text = (">= " if not target.size_complete else "") + human_size(target.size)
+            tree.insert("", "end", values=(label, size_text, str(target.path)), tags=(tag,))
 
         vsb = ttk.Scrollbar(list_frame, orient="vertical", command=tree.yview)
         hsb = ttk.Scrollbar(list_frame, orient="horizontal", command=tree.xview)
@@ -886,7 +920,7 @@ class DevBroomApp(tk.Tk):
 
         confirm_btn = self._make_button(
             btn_frame,
-            f"Delete {len(targets)} folder(s)",
+            f"Delete {len(targets)} permanently",
             on_confirm,
             danger=True,
         )
@@ -917,6 +951,7 @@ class DevBroomApp(tk.Tk):
         def _do_delete() -> None:
             deleted = 0
             freed_bytes = 0
+            partial_size = False
             failures: list[str] = []
 
             for i, (iid, target) in enumerate(zip(selected_ids, targets)):
@@ -925,6 +960,7 @@ class DevBroomApp(tk.Tk):
                 try:
                     delete_tree(target.path)
                     freed_bytes += target.size
+                    partial_size = partial_size or not target.size_complete
                     deleted += 1
                     if self.winfo_exists():
                         self.after(0, _remove_row, iid)
@@ -932,7 +968,7 @@ class DevBroomApp(tk.Tk):
                     failures.append(f"{target.path}\n  - {exc}")
 
             if self.winfo_exists():
-                self.after(0, _finish, deleted, freed_bytes, failures)
+                self.after(0, _finish, deleted, freed_bytes, partial_size, failures)
 
         def _remove_row(iid: str) -> None:
             if iid in self._tree.get_children():
@@ -941,12 +977,13 @@ class DevBroomApp(tk.Tk):
             self._row_tags.pop(iid, None)
             self._checked.discard(iid)
 
-        def _finish(deleted: int, freed_bytes: int, failures: list[str]) -> None:
+        def _finish(deleted: int, freed_bytes: int, partial_size: bool, failures: list[str]) -> None:
             self._progress.stop()
             self._btn_scan.config(state="normal")
             self._refresh_all_buttons()
 
-            message = f"Deleted {deleted} folder(s). Reclaimed {human_size(freed_bytes)}."
+            amount_label = "at least " if partial_size else ""
+            message = f"Deleted {deleted} folder(s). Reclaimed {amount_label}{human_size(freed_bytes)}."
             if failures:
                 message += f"\n\n{len(failures)} deletion(s) failed:\n" + "\n".join(failures)
                 messagebox.showwarning("Partial success", message)
@@ -956,8 +993,14 @@ class DevBroomApp(tk.Tk):
             self._found_var.set(f"{len(self._items)} folders found")
             self._update_summary()
             remaining_bytes = sum(target.size for target in self._items.values())
+            remaining_label = (
+                "at least "
+                if any(not target.size_complete for target in self._items.values())
+                else ""
+            )
             self._status_var.set(
-                f"Deleted {deleted} folder(s). {len(self._items)} remaining ({human_size(remaining_bytes)})."
+                f"Deleted {deleted} folder(s). {len(self._items)} remaining "
+                f"({remaining_label}{human_size(remaining_bytes)})."
             )
 
         threading.Thread(target=_do_delete, daemon=True).start()
@@ -981,14 +1024,18 @@ class DevBroomApp(tk.Tk):
     def _update_visible_total(self) -> None:
         visible_ids = self._tree.get_children()
         visible_total = sum(self._items[iid].size for iid in visible_ids if iid in self._items)
-        self._visible_total_var.set(f"{human_size(visible_total)} visible")
+        partial = self._scan_diagnostics.incomplete or any(
+            not self._items[iid].size_complete for iid in visible_ids if iid in self._items
+        )
+        prefix = "at least " if partial else ""
+        self._visible_total_var.set(f"{prefix}{human_size(visible_total)} visible")
 
     def _visible_targets(self) -> list[ScanTarget]:
         return [self._items[iid] for iid in self._tree.get_children() if iid in self._items]
 
     def _preview_results(self) -> None:
         targets = self._visible_targets()
-        preview_text = format_targets_table(targets)
+        preview_text = format_targets_table(targets, diagnostics=self._scan_diagnostics)
 
         preview = tk.Toplevel(self)
         preview.title("Scan Preview")
@@ -1040,9 +1087,9 @@ class DevBroomApp(tk.Tk):
         output_path = Path(output)
         try:
             if output_path.suffix.lower() == ".txt":
-                write_text_report(targets, output_path)
+                write_text_report(targets, output_path, diagnostics=self._scan_diagnostics)
             else:
-                write_json_report(targets, output_path)
+                write_json_report(targets, output_path, diagnostics=self._scan_diagnostics)
         except OSError as exc:
             messagebox.showerror("Export failed", f"Could not export results:\n{exc}")
             return
